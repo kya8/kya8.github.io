@@ -1,7 +1,8 @@
 ---
 title: Semantic const
-description: Is this const or not?
+description: Deep or shallow const?
 date: 2023-05-19
+lastmod: 2024-04-15
 tags:
     - c++
 ---
@@ -29,7 +30,7 @@ The lock operation on the mutex cannot work on a const `*this`, so the `getData(
 This contradicts our usual assumption of a getter method, how can an observer be non-const?
 
 After all, the non-constness comes from the implementation of `getData()`, which requires locking the mutex, thus modifying one of the members.
-However, the _interface_ being non-const is still suboptimal. What if we implement `getData()` with `std::atomic<T>::load`, which is `const`? The _interface_ declaration should be orthogonal to implementation choices.
+However, the _interface_ being non-const is still suboptimal. What if we implement `getData()` with `std::atomic<T>::load`, which is `const`? The _interface_ declaration should be orthogonal to implementation details.
 
 If we insist on keeping the mutex as a direct data member, the solution is to mark `mtx_` as `mutable`, so it's mutable even with const `*this`. This way, we achieve _semantic_ const, so the user of the API can hold their usual assumptions.
 
@@ -59,4 +60,9 @@ void as_mut(const T&&) = delete;
 
 ## Semantic non-const
 
-Sometimes things go the opposite direction: A method modifies some internal state via a pointer/reference member, so it only requires const `*this`, e.g. in a PIMPL class. In such circumstances, we still want to mark the method as non-const.
+Sometimes things go the opposite direction: A method modifies some internal state via a pointer/reference member, so it only requires const `*this`, e.g. in a PIMPL class. In such circumstances, we still might want to mark the method as non-const, when the object actually owns the referenced data, __since the managed data is semantically part of the object itself__.
+
+### const views, shallow constness
+
+However, if the object is merely a non-owning view into some referenced data, it makes more sense to use "shallow" constness, i.e. the underlying data is mutable through a const view object.
+`std::span<T>` is one example of shallow constness.

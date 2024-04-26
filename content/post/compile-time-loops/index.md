@@ -62,7 +62,8 @@ for_something<3>([](auto i){
 });
 ```
 `i` can be used as a compile-time integer. The trick here is to pass the compile time index as an `std::integral_constant` tag value, whose type (which encodes the integer) is then received by the generic lambda.
-Inside the lambda, `i.value` is a static, constexpr method of the deduced type `decltype(i)`.
+Inside the lambda, `i.value` is a static, constexpr member of the deduced type `decltype(i)`. Combined with the conversion operator of `std::integral_constant` which converts to its tag value,
+`i` can be used as a compile-time constant.
 
 ## std::interger_sequence
 
