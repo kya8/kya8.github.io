@@ -1,6 +1,7 @@
 ---
 title: Pointers (again)
 date: 2023-01-04
+lastmod: 2024-06-02
 draft: false
 
 tags:
@@ -9,7 +10,7 @@ tags:
 ---
 
 # Pointer arithmetics
-It is well-known that in both C and C++, pointer arithmetics is only valid for operands (and the imaginary resultant pointer address) that are related to each other.
+It is well-known that in both C and C++, pointer arithmetics is only meaningful for operands (and the imaginary resultant pointer address) that are related to each other.
 By related we mean, they both point to the same object (or one-past-end), or the same array (or one-past-end).
 
 Per C++ standard, pointers are _iterators_, not _numbers representing address space_, although they're often implemented as such.
@@ -24,6 +25,7 @@ To quote https://stackoverflow.com/a/56038995/17815599:
 So, `p1 - p0` isn't really saying "give me the difference between the addresses pointed by `p1` and `p0`",
 it's saying "Assuming they both refer to objects in the same array, what's the difference between their indices inside the array?"
 (Here, we consider a single object as an array of length one). If the assumption does not hold, this is undefined behavior.
+For relational (greater than, less than...) comparisons however, the behavior is _unspecified_.
 
 ## what are "arrays"?
 
@@ -75,3 +77,10 @@ Two objects a and b are _pointer-interconvertible_ if:
 - there exists an object c such that a and c are pointer-interconvertible, and c and b are pointer-interconvertible.
 
 ...combined with pointer conversion rules, it's possible to convert between pointer to a standard-layout struct and pointer to its first member, via an intermediate `void*` pointer.
+
+# Pointer total order
+There is actually one exception to the "same-object-or-array" rule: the total order of pointers in C++.
+It only applies to comparison functors, `std::less`, `std::greater` etc. This total order is consistent with defined pointer comparison rules of the built-in comparison operators.
+For the unspecified case, the result becomes implementation-defined.
+
+Note that in C, relational comparison of unrelated pointers is _undefined_.

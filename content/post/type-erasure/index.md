@@ -17,9 +17,9 @@ This is a simple case of type erasure, which is not type safe. A tagged union al
 
 # std::function
 `std::function<R(Args...)>` is a type-erased polymorphic function object that can wrap all kinds of callables with the specified argument types `Args...` and a return type that is convertible to `R`.
-It stores the provided callable by (forwarding) copy/move. Dynamic allocation is required in the general case, however implementations may use SBO (Small Buffer optimization).
+It stores the provided callable (with ownership) by (forwarding) copy/move. Dynamic allocation is required in the general case, however implementations may use SBO (Small Buffer optimization).
 
-It's suitable for use at API boundaries, e.g. when providing a callback.
+It's suitable for use at API boundaries, e.g. when providing a callback, with owning/by-value semantics.
 
 ## Implementation
 
@@ -118,10 +118,14 @@ Another implementation would be an abstract base functor, which defines the virt
 ## Performance
 The performance cost mainly stems from dynamic allocation and function pointer redirections.
 
-# `std::any`
-As its name suggests, `std::any` is a *container*, that can wrap an object of any type. The type info is checked on access, so it can provide type safety, compared to `void*`.
+## Ownership
+`std::function` has ownership over the contained callable. Since C++26, there is also `std::function_ref` which stores non-owning reference to the actual callable, to avoid additional allocation.
 
-Like other *containers*, `std::any` manages storage on its own. Since the size of the object can be arbitary, it generally requires dynamic allocation (so it's more expensive compared to `std::variant`).
+# `std::any`
+As its name suggests, `std::any` is a *container*, that can wrap an object of any type. The type info is checked on access, so it provides type safety, compared to `void*`.
+
+Besides that, `std::any` has clear owning semantics, while `void*` pointers have no inherent ownership.
+Since the size of the object can be arbitary, it generally requires dynamic allocation (so it's more expensive compared to `std::variant`).
 
 The implementation of `any_cast` requires no RTTI, since `std::any` does not need to know the exact type of the contained object, it only needs to check if the requested type matches the actual type when doing `any_cast`. This is typically achieved by storing a pointer to a static member function of a class template that is instantiated by the stored type. Comparing types is thus equivalent to comparing pointers to templated functions.
 
@@ -145,13 +149,16 @@ It's usually implemented with placement new, on a buffer that is large enough to
 This allows unified, type-safe operations on `std::variant` objects.
 
 ### Implementation
-A typical implementation can generate (at compile time) a table of function pointers to the resolved/instantiated function for every value type of the variant. At runtime, the stored type index is used to select the right function.
+A typical implementation can generate (at compile time) a table of function pointers to the resolved/instantiated function for every value type of the variant.
+At runtime, the stored type index is used to select the right function.
 
 Again, function pointers!
 
 # Other sum types
 `std::optional`, `std::expected`, ...
 
+In general, sum types sits between actual type erasure that allows wrapping arbitary types at runtime, and fully static polymorphism.
+
 
 # Type-erased iterator
-E.g. `boost::any_range`, `any_iter`. Such iterators wraps any iterator that satisfy some behaviors, such as being forward iterators. They're especially useful at API boundaries, to provide support for abitary iterator/ranges, without using templates.
+E.g. `boost::any_range`, `any_iter`. Such iterators wraps any iterator that satisfy some behaviors, such as being forward iterators. They're especially useful at API boundaries, to provide support for abitary iterator/ranges, without compile-time monomorphization.

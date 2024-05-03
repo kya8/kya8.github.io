@@ -29,8 +29,13 @@ A polymorphic object type defines a set of methods. Such object can then store a
 
 People have been writing such implementations for years, such as [Poly](https://github.com/facebook/folly/blob/main/folly/docs/Poly.md), [dyno](https://github.com/ldionne/dyno), [proxy](https://github.com/microsoft/proxy).
 
+## benefits
+* Allows value-semantics, and copying. Although polymorphic objects still require dynamic allocation in the general case, the user does not need to care about it. Copying is possible, by storing function pointers of copying operations. Virtual inheritance on the other hand, does not play nicely with copy constructors!
+* Allows Small buffer optimization. Since they're custom objects, SBO is possible, compared to `std::unique_ptr<InterfaceType>`.
+* Allows duck typing. Although this isn't always desired.
+
 ## Type erasure
-Actually, we already have a limited form of polymorphic object in C++: `std::function`.
+Actually, we already have a limited version of polymorphic object in C++: `std::function`.
 It only knows about the `operator()`, but the idea is similar: Use type-erasure.
 
 For polymorphic objects, we need to keep the function pointers somewhere, but for potentially multiple member methods.
