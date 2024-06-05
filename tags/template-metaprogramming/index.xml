@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Template Metaprogramming on Kya's Blog</title><link>https://kya8.github.io/tags/template-metaprogramming/</link><description>Recent content in Template Metaprogramming on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Mon, 09 Oct 2023 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/template-metaprogramming/index.xml" rel="self" type="application/rss+xml"/><item><title>Compile time loops in C++</title><link>https://kya8.github.io/p/compile-time-loops-in-c-/</link><pubDate>Mon, 09 Oct 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/compile-time-loops-in-c-/</guid><description>&lt;p>A compile time loop is a loop that is guaranteed to be expanded at compile time.
+In contrast, a regular runtime loop typically keeps track of a loop condition at runtime,
+and checks the condition at every iteration to determine whether to exit the loop.&lt;/p>
+&lt;p>An optimizing compiler is often able to expand some runtime loops in-place, but not always. We&amp;rsquo;ll introduce several ways of composing compile-time loops, using template metaprogramming.&lt;/p>
+&lt;h1 id="generic-formulation">Generic formulation
+&lt;/h1>&lt;p>Here&amp;rsquo;s the problem: Given a compile time integer sequence of [0, &amp;hellip;, N), apply a function (template) over all &lt;code>N&lt;/code> integers. The integers should be available to the function as compile time constants.&lt;/p>
+&lt;h1 id="template-recursion">Template recursion
+&lt;/h1>&lt;p>A common practice is to recurse through all the indices one by one. A non-generic example would be:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;span class="lnt">9
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">unsigned&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">for_something&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">N&lt;/span> &lt;span class="o">&amp;gt;=&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">for_something&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// do something with N-1
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">cout&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">endl&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>This function will loop from &lt;code>0&lt;/code> to &lt;code>N-1&lt;/code>. The &lt;code>if constexpr&lt;/code> can be replaced with a template specialization for &lt;code>N=0&lt;/code>.&lt;/p>
+&lt;h2 id="the-magic-constexpr-index">The magic &lt;code>constexpr&lt;/code> index
+&lt;/h2>&lt;p>To make this generic, we could use a template template parameter for a callable, or the way I prefer: a class template parameter which has templated &lt;code>operator()&lt;/code>, e.g. a generic lambda.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">unsigned&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">typename&lt;/span> &lt;span class="n">F&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">for_something&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">F&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">f&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">N&lt;/span> &lt;span class="o">&amp;gt;=&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">for_something&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">F&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">));&lt;/span> &lt;span class="c1">// may be you shouldn&amp;#39;t forward
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">F&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">)(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">integral_constant&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">decltype&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">{});&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Use it with a generic lambda:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;span class="lnt">9
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="n">for_something&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="mi">3&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">([](&lt;/span>&lt;span class="k">auto&lt;/span> &lt;span class="n">i&lt;/span>&lt;span class="p">){&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">cout&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">i&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">endl&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// the i.value is constexpr!
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// i even has implicit conversion to its value!
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">i&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">value&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="mi">9999&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">static_assert&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">false&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;this should&amp;#39;ve been removed at compile time&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// some dependent false value may be required to make this compile.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">});&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;code>i&lt;/code> can be used as a compile-time integer. The trick here is to pass the compile time index as an &lt;code>std::integral_constant&lt;/code> tag value, whose type (which encodes the integer) is then received by the generic lambda.
+Inside the lambda, &lt;code>i.value&lt;/code> is a static, constexpr member of the deduced type &lt;code>decltype(i)&lt;/code>. Combined with the conversion operator of &lt;code>std::integral_constant&lt;/code> which converts to its tag value,
+&lt;code>i&lt;/code> can be used as a compile-time constant.&lt;/p>
+&lt;h2 id="stdinterger_sequence">std::interger_sequence
+&lt;/h2>&lt;p>With the help of &lt;code>std::make_integer_sequence&lt;/code>, we could easily generate a parameter pack of integer sequence, and recurse over the pack. The idea is basically the same, you just extract the first element in the pack, and recurse the rest.&lt;/p>
+&lt;h2 id="drawbacks">Drawbacks
+&lt;/h2>&lt;p>Template recursion can generate huge amount of instantiations of the same function/class template at compile time, so they are not optimal for compile time performance.&lt;/p>
+&lt;p>As for runtime performance, as long as everything is properly inlined without jumping through all the indirections and recursions, it should be the same as unrolling the loop manually.&lt;/p>
+&lt;h1 id="pack-expansion-and-fold-expressions">Pack expansion and fold expressions
+&lt;/h1>&lt;h2 id="pack-expansion-hack">Pack expansion hack
+&lt;/h2>&lt;p>A common workaround before C++17&amp;rsquo;s fold expressions is to expand the pack into an array initializer:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">size_t&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">for_impl&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">index_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="p">...&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">bool&lt;/span> &lt;span class="n">_arr&lt;/span>&lt;span class="p">[]&lt;/span> &lt;span class="p">{&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">some_expression&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)...&lt;/span> &lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">(&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="n">_arr&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;strong>Note&lt;/strong>: Here, the order of evaluation inside the braces is guaranteed, unlike function arguments.&lt;/p>
+&lt;h2 id="fold-expressions">Fold expressions
+&lt;/h2>&lt;p>Fold expressions provide a much nicer way of doing pack iteration and (when combined with &lt;code>std::integer_sequence&lt;/code>) compile time loop.
+Here&amp;rsquo;s a class template which applies a generic function over an integer sequence, expanded at compile time:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">ForInts&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span> &lt;span class="n">IntT&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">IntT&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">ForInts&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">integer_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">IntT&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">Is&lt;/span>&lt;span class="p">...&lt;/span>&lt;span class="o">&amp;gt;&amp;gt;&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span> &lt;span class="n">F&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">static&lt;/span> &lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">apply&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">F&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">f&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">(&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">integral_constant&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">IntT&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">Is&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">{})),&lt;/span> &lt;span class="p">...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">auto&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">using&lt;/span> &lt;span class="n">ForSeq&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">ForInts&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">make_integer_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">decltype&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">&amp;gt;&amp;gt;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The &lt;code>ForSeq&lt;/code> alias template generates an integer sequence as the template parameter for &lt;code>ForInts&lt;/code>.
+The &lt;code>ForInts&lt;/code> class template&amp;rsquo;s &lt;code>apply()&lt;/code> method applies a given function object over the indices,
+by comma-folding over the function expression. It employs the same &lt;code>std::integral_constant&lt;/code> trick.
+The &lt;code>void&lt;/code> cast is there to deal with overloaded &lt;code>operator,&lt;/code>.&lt;/p>
+&lt;p>Example usage:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">ostringstream&lt;/span> &lt;span class="n">ss&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">ForSeq&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="mi">10&lt;/span>&lt;span class="o">&amp;gt;::&lt;/span>&lt;span class="n">apply&lt;/span>&lt;span class="p">([&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">ss&lt;/span>&lt;span class="p">](&lt;/span>&lt;span class="k">auto&lt;/span> &lt;span class="n">i&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">i&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">value&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">ss&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;Start!&lt;/span>&lt;span class="se">\n&lt;/span>&lt;span class="s">&amp;#34;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ss&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;loop: &amp;#34;&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">i&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">value&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="sc">&amp;#39; &amp;#39;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">});&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>This is a much more natural way of implementing and writing compile-time loops.&lt;/p>
+&lt;p>Using &lt;code>std::make_integer_sequence&lt;/code> often involves an indirection to a separate &lt;code>impl&lt;/code> function or class, which catches the actual integer list.
+With explicit lambda template in C++20, we could replace the &lt;code>impl&lt;/code> function with an inner lambda:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">size_t&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">do_something&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">[]&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">template&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">size_t&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">index_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="p">...&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// fold over Is...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="p">}(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">make_index_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">{});&lt;/span> &lt;span class="c1">// IIFE
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h2 id="runtime-break-from-the-loop-short-circuiting">Runtime break from the loop (short-circuiting)
+&lt;/h2>&lt;p>What if we want to break half-way from the compile time loop, depending on some runtime condition?
+It&amp;rsquo;s trivial to achieve with logical folds, since the &lt;code>&amp;amp;&amp;amp;&lt;/code> and &lt;code>||&lt;/code> operators in C++ has short-circuiting behavior.&lt;/p>
+&lt;p>A partial demo:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;span class="lnt">9
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span> &lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">size_t&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">fn&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">index_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="p">...&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">([]()&lt;/span> &lt;span class="o">-&amp;gt;&lt;/span> &lt;span class="kt">bool&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// do something, return true or false
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// return true if the loop should be continued.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// return false if not.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="p">}()&lt;/span> &lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="p">...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The above &lt;code>fn()&lt;/code> function will evaluate all folded expressions (here, the expression is an IIFE returning either &lt;code>true&lt;/code> or &lt;code>false&lt;/code>). If at some point the IIFE returns &lt;code>false&lt;/code>, all remaining expressions will be skipped.&lt;/p>
+&lt;h1 id="sidenote-implementation-of-stdmake_integer_sequence">Sidenote: Implementation of &lt;code>std::make_integer_sequence&lt;/code>
+&lt;/h1>&lt;p>Many compile-time loop patterns ultimately boils down to &lt;code>std::make_integer_sequence&lt;/code> (or equivalent).&lt;/p>
+&lt;p>A naive implementation is one-by-one template recursion. Something smarter would be $\log_2(N)$ recursion, which obviously works by dividing by half every iteration.&lt;/p>
+&lt;p>Since &lt;code>std::make_integer_sequence&lt;/code> is ubiquitous in template metaprogramming, some compilers implement
+it with magic intrinsics.&lt;/p>
+&lt;ul>
+&lt;li>MSVC and Clang: &lt;code>__make_integer_seq&lt;/code>&lt;/li>
+&lt;li>GCC: &lt;code>__integer_pack&lt;/code>&lt;/li>
+&lt;/ul></description></item><item><title>(Im)perfect forwarding</title><link>https://kya8.github.io/p/imperfect-forwarding/</link><pubDate>Tue, 30 May 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/imperfect-forwarding/</guid><description>&lt;h1 id="brief-recap-on-perfect-forwarding">Brief recap on perfect forwarding
+&lt;/h1>&lt;h2 id="reference-collapsing-and-type-deduction">Reference collapsing and type deduction
+&lt;/h2>&lt;p>There is no reference-to-reference types in C++: such type declarations would just collapse to a normal reference.
+Depending on the type of the reference, the final type is a lvalue-ref if one of the refs is lvalue-ref, otherwise a rvalue-ref.&lt;/p>
+&lt;p>The reference collapsing rule enables deduction of &lt;em>forwarding references&lt;/em>:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span> &lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">decltype&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">auto&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">func&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">arg&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="nf">func_inner&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">arg&lt;/span>&lt;span class="p">)...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The type &lt;code>T&lt;/code> will be either a value type w/o reference, or an lvalue-ref, such that the collapsed &lt;code>T&amp;amp;&amp;amp;&lt;/code> type will match the &lt;em>value categories&lt;/em> of arguments.&lt;/p>
+&lt;h2 id="stdforwardt">&lt;code>std::forward&amp;lt;T&amp;gt;&lt;/code>
+&lt;/h2>&lt;p>It effectively returns &lt;code>T&amp;amp;&amp;amp;&lt;/code> reference to its arguments. According to the rules of the value categories of function expressions, if &lt;code>T&amp;amp;&amp;amp;&lt;/code> is rvalue-ref, the forward expression is itself an rvalue.
+Otherwise &lt;code>T&amp;amp;&amp;amp;&lt;/code> was deduced to lvalue-ref, the forward expression is an lvalue. Therefore, &lt;code>std::forward&lt;/code> always forward arguments as their original value categories.&lt;/p>
+&lt;p>&lt;strong>The &lt;code>std::forward&amp;lt;T&amp;gt;&lt;/code> function template is meant to be used within deduced contexts&lt;/strong>, i.e. where the type &lt;code>T&lt;/code> has been deduced (either as a type template parameter &lt;code>T&amp;amp;&amp;amp;&lt;/code>, or &lt;code>auto&amp;amp;&amp;amp;&lt;/code>).
+You should NOT let it deduce &lt;code>T&lt;/code> via its argument, this is not how it works!&lt;/p>
+&lt;p>Luckily, the C++ standard specifies the signatures as &lt;code>T&amp;amp;&amp;amp; forward( typename std::remove_reference&amp;lt;T&amp;gt;::type&amp;amp; t )&lt;/code> and &lt;code>T&amp;amp;&amp;amp; forward( typename std::remove_reference&amp;lt;T&amp;gt;::type&amp;amp;&amp;amp; t )&lt;/code>.
+This makes type deduction on &lt;code>T&lt;/code> impossible, so using &lt;code>std::forward&lt;/code> without specifying template parameter is a compile-time error.&lt;/p>
+&lt;h1 id="imperfect-forwarding">Imperfect forwarding
+&lt;/h1>&lt;p>This title is somewhat clickbaity. Here we discuss some workarounds and unusual ways of using perfect forwarding.&lt;/p>
+&lt;h2 id="use-without-templates">Use without templates
+&lt;/h2>&lt;p>Often we want a function to accept both rvalue and lvalue arguments. Sometimes we just write 2 separate definitions for this (e.g. move and copy constructor), because they&amp;rsquo;re rightfully different.
+However, these two overloads can sometimes be quite duplicated. To avoid code duplication:&lt;/p>
+&lt;ol>
+&lt;li>
+&lt;p>A quick-and-dirty approach is to always pass by value, then move. This incurs one additional move:&lt;/p>
+&lt;ul>
+&lt;li>For the lvalue-ref overload, this means copy first, then move.&lt;/li>
+&lt;li>For rvalue-ref overload, this means move twice.&lt;/li>
+&lt;/ul>
+&lt;p>This method is acceptable when moving is cheap.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>Always forward to an internal function template that takes forwarding reference, and let it deduce the type.
+Use &lt;code>std::forward&amp;lt;T&amp;gt;&lt;/code> inside the function template. Since the function is only used internally, we don&amp;rsquo;t need to check its arg type.&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;h2 id="variadic-forward-in-init-capture">Variadic forward in init-capture
+&lt;/h2>&lt;p>&lt;em>&lt;strong>Note&lt;/strong>&lt;/em>: We&amp;rsquo;re talking about capturing by copy or move, not by reference.&lt;/p>
+&lt;p>Since C++14, init-capture enables lambdas to capture (by value) by move, or by forwarding:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// within some template that deduces T
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">val&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">val&lt;/span>&lt;span class="p">)]{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>This only works one-by-one. What if we want to forward a parameter pack?&lt;/p>
+&lt;p>With C++20, it&amp;rsquo;s simple:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="p">[...&lt;/span>&lt;span class="n">vals&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Ts&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">vals&lt;/span>&lt;span class="p">)]{}&lt;/span> &lt;span class="c1">//...
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Before C++20, tuples are your friend: (perfectly) forward the parameter pack into a tuple, then unpack the tuple inside the lambda:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="p">[&lt;/span>&lt;span class="n">vals&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">make_tuple&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Ts&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">vals&lt;/span>&lt;span class="p">)...)]&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// use the vals, via std::apply:
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">apply&lt;/span>&lt;span class="p">([](&lt;/span>&lt;span class="k">auto&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="p">){&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// use args as you want
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="p">},&lt;/span> &lt;span class="n">vals&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;code>std::make_tuple&lt;/code> will make a by-value tuple, initialized by forwarding the &lt;code>vals&lt;/code>.
+We unpack the tuple with &lt;code>std::apply&lt;/code>.&lt;/p>
+&lt;h2 id="use-in-non-deduced-context">Use in non-deduced context
+&lt;/h2>&lt;p>Although &lt;code>std::forward&lt;/code> is designed for deduced contexts, it can sometimes be useful in non-deduced scenarios.&lt;/p>
+&lt;p>For example, the &lt;code>R operator()(Args... args)&lt;/code> of &lt;code>std::function&amp;lt;R(Args...)&amp;gt;&lt;/code> effectively does &lt;code>INVOKE&amp;lt;R&amp;gt;(f, std::forward&amp;lt;Args&amp;gt;(args)...)&lt;/code>, where &lt;code>f&lt;/code> is the stored callable.
+We known that the &lt;code>Args&lt;/code> is specified by the user, not deduced.
+However, it still makes sense to forward &lt;code>args...&lt;/code> with &lt;code>std::forward&amp;lt;Args&amp;gt;&lt;/code>:&lt;/p>
+&lt;ul>
+&lt;li>If some &lt;code>Arg&lt;/code> has some value type, then the &lt;code>operator()&lt;/code> receives it by value. Inside &lt;code>operator()&lt;/code>, we do want to pass it as an rvalue.&lt;/li>
+&lt;li>If &lt;code>Arg&lt;/code> has rvalue/lvalue type, then the additional forwarding has no effect.&lt;/li>
+&lt;/ul></description></item></channel></rss>

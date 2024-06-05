@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Systems Programming on Kya's Blog</title><link>https://kya8.github.io/tags/systems-programming/</link><description>Recent content in Systems Programming on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Mon, 20 May 2024 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/systems-programming/index.xml" rel="self" type="application/rss+xml"/><item><title>Portable Signal handling</title><link>https://kya8.github.io/p/portable-signal-handling/</link><pubDate>Mon, 20 May 2024 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/portable-signal-handling/</guid><description>&lt;h1 id="stdsignal-and-signal-handlers">&lt;code>std::signal&lt;/code> and signal handlers
+&lt;/h1>&lt;p>The standard function &lt;code>std::signal&lt;/code> enables registering &lt;em>signal handlers&lt;/em> that are invoked when a given signal is delivered, asynchronously.
+Since the handler can interrupt the execution of the program at potentially any point, actions allowed in the handler are quite limited.
+In particular, the handler is allowed to access a global (with static storage duration) variable that is &lt;code>volatile std::sig_atomic_t&lt;/code> or lock-free &lt;code>std::atomic&amp;lt;...&amp;gt;&lt;/code>.
+This lets us set a flag inside the handler, and correctly check the flag outside the handler.
+Additionally, a signal handler can re-call &lt;code>std::signal&lt;/code> for the same signal that is currently being handled.&lt;/p>
+&lt;p>The POSIX standard specifies additional library functions that are guaranteed to be async-signal-safe, that is, safe to call from signal handlers (See &lt;code>man 7 signal-safety&lt;/code>).
+However on POSIX systems, the &lt;code>sigaction&lt;/code> family of functions should be preferred.&lt;/p>
+&lt;h1 id="portable-ways-to-catch-signals">Portable ways to catch signals
+&lt;/h1>&lt;p>Suppose we need to catch a signal and inform the program about it, so it can act accordingly. E.g., catching &lt;code>SIGINT&lt;/code> (&lt;code>Ctrl-C&lt;/code>) to perform graceful cleanup and shutdown.
+The canonical way of doing this is to have a dedicated thread that responds to a global flag, which shall be set by the signal handler.&lt;/p>
+&lt;p>Before C++20, there&amp;rsquo;s no platform-independent way, besides polling the flag repeatedly:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="k">static&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">atomic&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">bool&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">flag&lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="nb">false&lt;/span>&lt;span class="p">};&lt;/span> &lt;span class="c1">// assuming it&amp;#39;s lock-free
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">extern&lt;/span> &lt;span class="s">&amp;#34;C&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">signal_handler&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">sig&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">sig&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">SIGINT&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">store&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">true&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="nf">sigint_thread_fn&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="cm">/*...*/&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span> &lt;span class="c1">// demonstration only
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">while&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">load&lt;/span>&lt;span class="p">())&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">this_thread&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">sleep_for&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">chrono&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">milliseconds&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">100&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// precede to perform shutdown actions ...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// e.g., signaling the main thread to stop.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&amp;hellip;Because we don&amp;rsquo;t have a signal-safe function to wait on the atomic flag.&lt;/p>
+&lt;h2 id="stdatomictwait">&lt;code>std::atomic&amp;lt;T&amp;gt;::wait()&lt;/code>
+&lt;/h2>&lt;p>C++20 introduces &lt;code>wait()&lt;/code> and &lt;code>notify()&lt;/code> methods on &lt;code>std::atomic&amp;lt;T&amp;gt;&lt;/code> and &lt;code>std::atomic_flag&lt;/code>.
+If the atomic type is lock-free (which is always the case for &lt;code>std::atomic_flag&lt;/code>),
+we can safely use &lt;code>wait()&lt;/code> and &lt;code>notify()&lt;/code> in the waiting thread and the signal handler, to avoid the sleep-and-poll loop above.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="k">static&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">atomic_flag&lt;/span> &lt;span class="n">flag&lt;/span>&lt;span class="p">{};&lt;/span> &lt;span class="c1">// Always lock-free
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// C++20 guarantees it&amp;#39;s initialized to false
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">extern&lt;/span> &lt;span class="s">&amp;#34;C&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">signal_handler&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">sig&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">sig&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">SIGINT&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">test_and_set&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">notify_all&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="nf">sigint_thread_fn&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="cm">/*...*/&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">wait&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">false&lt;/span>&lt;span class="p">);&lt;/span> &lt;span class="c1">// will block until flag has been changed.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h1 id="platform-dependent-ways">Platform-dependent ways
+&lt;/h1>&lt;h2 id="posix">POSIX
+&lt;/h2>&lt;p>Incrementing a POSIX semaphore (&lt;code>sem_post&lt;/code>) is signal-safe according to the POSIX specification.
+This can be used for notification in signal handlers. The waiting thread would wait via &lt;code>sem_wait&lt;/code>.&lt;/p>
+&lt;p>Alternatively there is &lt;code>sigwaitinfo&lt;/code> and &lt;code>sigwait&lt;/code>, which explicitly wait for pending signals.&lt;/p>
+&lt;p>If you&amp;rsquo;re on Linux, another alternative would be using &lt;code>signalfd&lt;/code> and waiting on the file descriptor (e.g. via &lt;code>epoll&lt;/code>).&lt;/p>
+&lt;h2 id="windows">Windows
+&lt;/h2></description></item></channel></rss>

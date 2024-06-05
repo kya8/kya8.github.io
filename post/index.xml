@@ -1,0 +1,1205 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on Kya's Blog</title><link>https://kya8.github.io/post/</link><description>Recent content in Posts on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Mon, 20 May 2024 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/post/index.xml" rel="self" type="application/rss+xml"/><item><title>Portable Signal handling</title><link>https://kya8.github.io/p/portable-signal-handling/</link><pubDate>Mon, 20 May 2024 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/portable-signal-handling/</guid><description>&lt;h1 id="stdsignal-and-signal-handlers">&lt;code>std::signal&lt;/code> and signal handlers
+&lt;/h1>&lt;p>The standard function &lt;code>std::signal&lt;/code> enables registering &lt;em>signal handlers&lt;/em> that are invoked when a given signal is delivered, asynchronously.
+Since the handler can interrupt the execution of the program at potentially any point, actions allowed in the handler are quite limited.
+In particular, the handler is allowed to access a global (with static storage duration) variable that is &lt;code>volatile std::sig_atomic_t&lt;/code> or lock-free &lt;code>std::atomic&amp;lt;...&amp;gt;&lt;/code>.
+This lets us set a flag inside the handler, and correctly check the flag outside the handler.
+Additionally, a signal handler can re-call &lt;code>std::signal&lt;/code> for the same signal that is currently being handled.&lt;/p>
+&lt;p>The POSIX standard specifies additional library functions that are guaranteed to be async-signal-safe, that is, safe to call from signal handlers (See &lt;code>man 7 signal-safety&lt;/code>).
+However on POSIX systems, the &lt;code>sigaction&lt;/code> family of functions should be preferred.&lt;/p>
+&lt;h1 id="portable-ways-to-catch-signals">Portable ways to catch signals
+&lt;/h1>&lt;p>Suppose we need to catch a signal and inform the program about it, so it can act accordingly. E.g., catching &lt;code>SIGINT&lt;/code> (&lt;code>Ctrl-C&lt;/code>) to perform graceful cleanup and shutdown.
+The canonical way of doing this is to have a dedicated thread that responds to a global flag, which shall be set by the signal handler.&lt;/p>
+&lt;p>Before C++20, there&amp;rsquo;s no platform-independent way, besides polling the flag repeatedly:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="k">static&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">atomic&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">bool&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">flag&lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="nb">false&lt;/span>&lt;span class="p">};&lt;/span> &lt;span class="c1">// assuming it&amp;#39;s lock-free
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">extern&lt;/span> &lt;span class="s">&amp;#34;C&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">signal_handler&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">sig&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">sig&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">SIGINT&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">store&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">true&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="nf">sigint_thread_fn&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="cm">/*...*/&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span> &lt;span class="c1">// demonstration only
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">while&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">load&lt;/span>&lt;span class="p">())&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">this_thread&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">sleep_for&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">chrono&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">milliseconds&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">100&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// precede to perform shutdown actions ...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// e.g., signaling the main thread to stop.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&amp;hellip;Because we don&amp;rsquo;t have a signal-safe function to wait on the atomic flag.&lt;/p>
+&lt;h2 id="stdatomictwait">&lt;code>std::atomic&amp;lt;T&amp;gt;::wait()&lt;/code>
+&lt;/h2>&lt;p>C++20 introduces &lt;code>wait()&lt;/code> and &lt;code>notify()&lt;/code> methods on &lt;code>std::atomic&amp;lt;T&amp;gt;&lt;/code> and &lt;code>std::atomic_flag&lt;/code>.
+If the atomic type is lock-free (which is always the case for &lt;code>std::atomic_flag&lt;/code>),
+we can safely use &lt;code>wait()&lt;/code> and &lt;code>notify()&lt;/code> in the waiting thread and the signal handler, to avoid the sleep-and-poll loop above.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="k">static&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">atomic_flag&lt;/span> &lt;span class="n">flag&lt;/span>&lt;span class="p">{};&lt;/span> &lt;span class="c1">// Always lock-free
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// C++20 guarantees it&amp;#39;s initialized to false
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">extern&lt;/span> &lt;span class="s">&amp;#34;C&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">signal_handler&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">sig&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">sig&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">SIGINT&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">test_and_set&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">notify_all&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="nf">sigint_thread_fn&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="cm">/*...*/&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">wait&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">false&lt;/span>&lt;span class="p">);&lt;/span> &lt;span class="c1">// will block until flag has been changed.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h1 id="platform-dependent-ways">Platform-dependent ways
+&lt;/h1>&lt;h2 id="posix">POSIX
+&lt;/h2>&lt;p>Incrementing a POSIX semaphore (&lt;code>sem_post&lt;/code>) is signal-safe according to the POSIX specification.
+This can be used for notification in signal handlers. The waiting thread would wait via &lt;code>sem_wait&lt;/code>.&lt;/p>
+&lt;p>Alternatively there is &lt;code>sigwaitinfo&lt;/code> and &lt;code>sigwait&lt;/code>, which explicitly wait for pending signals.&lt;/p>
+&lt;p>If you&amp;rsquo;re on Linux, another alternative would be using &lt;code>signalfd&lt;/code> and waiting on the file descriptor (e.g. via &lt;code>epoll&lt;/code>).&lt;/p>
+&lt;h2 id="windows">Windows
+&lt;/h2></description></item><item><title>Compile time loops in C++</title><link>https://kya8.github.io/p/compile-time-loops-in-c-/</link><pubDate>Mon, 09 Oct 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/compile-time-loops-in-c-/</guid><description>&lt;p>A compile time loop is a loop that is guaranteed to be expanded at compile time.
+In contrast, a regular runtime loop typically keeps track of a loop condition at runtime,
+and checks the condition at every iteration to determine whether to exit the loop.&lt;/p>
+&lt;p>An optimizing compiler is often able to expand some runtime loops in-place, but not always. We&amp;rsquo;ll introduce several ways of composing compile-time loops, using template metaprogramming.&lt;/p>
+&lt;h1 id="generic-formulation">Generic formulation
+&lt;/h1>&lt;p>Here&amp;rsquo;s the problem: Given a compile time integer sequence of [0, &amp;hellip;, N), apply a function (template) over all &lt;code>N&lt;/code> integers. The integers should be available to the function as compile time constants.&lt;/p>
+&lt;h1 id="template-recursion">Template recursion
+&lt;/h1>&lt;p>A common practice is to recurse through all the indices one by one. A non-generic example would be:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;span class="lnt">9
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">unsigned&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">for_something&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">N&lt;/span> &lt;span class="o">&amp;gt;=&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">for_something&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// do something with N-1
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">cout&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">endl&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>This function will loop from &lt;code>0&lt;/code> to &lt;code>N-1&lt;/code>. The &lt;code>if constexpr&lt;/code> can be replaced with a template specialization for &lt;code>N=0&lt;/code>.&lt;/p>
+&lt;h2 id="the-magic-constexpr-index">The magic &lt;code>constexpr&lt;/code> index
+&lt;/h2>&lt;p>To make this generic, we could use a template template parameter for a callable, or the way I prefer: a class template parameter which has templated &lt;code>operator()&lt;/code>, e.g. a generic lambda.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">unsigned&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">typename&lt;/span> &lt;span class="n">F&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">for_something&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">F&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">f&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">N&lt;/span> &lt;span class="o">&amp;gt;=&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">for_something&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">F&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">));&lt;/span> &lt;span class="c1">// may be you shouldn&amp;#39;t forward
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">F&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">)(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">integral_constant&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">decltype&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">{});&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Use it with a generic lambda:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;span class="lnt">9
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="n">for_something&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="mi">3&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">([](&lt;/span>&lt;span class="k">auto&lt;/span> &lt;span class="n">i&lt;/span>&lt;span class="p">){&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">cout&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">i&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">endl&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// the i.value is constexpr!
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// i even has implicit conversion to its value!
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">i&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">value&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="mi">9999&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">static_assert&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">false&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;this should&amp;#39;ve been removed at compile time&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// some dependent false value may be required to make this compile.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">});&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;code>i&lt;/code> can be used as a compile-time integer. The trick here is to pass the compile time index as an &lt;code>std::integral_constant&lt;/code> tag value, whose type (which encodes the integer) is then received by the generic lambda.
+Inside the lambda, &lt;code>i.value&lt;/code> is a static, constexpr member of the deduced type &lt;code>decltype(i)&lt;/code>. Combined with the conversion operator of &lt;code>std::integral_constant&lt;/code> which converts to its tag value,
+&lt;code>i&lt;/code> can be used as a compile-time constant.&lt;/p>
+&lt;h2 id="stdinterger_sequence">std::interger_sequence
+&lt;/h2>&lt;p>With the help of &lt;code>std::make_integer_sequence&lt;/code>, we could easily generate a parameter pack of integer sequence, and recurse over the pack. The idea is basically the same, you just extract the first element in the pack, and recurse the rest.&lt;/p>
+&lt;h2 id="drawbacks">Drawbacks
+&lt;/h2>&lt;p>Template recursion can generate huge amount of instantiations of the same function/class template at compile time, so they are not optimal for compile time performance.&lt;/p>
+&lt;p>As for runtime performance, as long as everything is properly inlined without jumping through all the indirections and recursions, it should be the same as unrolling the loop manually.&lt;/p>
+&lt;h1 id="pack-expansion-and-fold-expressions">Pack expansion and fold expressions
+&lt;/h1>&lt;h2 id="pack-expansion-hack">Pack expansion hack
+&lt;/h2>&lt;p>A common workaround before C++17&amp;rsquo;s fold expressions is to expand the pack into an array initializer:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">size_t&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">for_impl&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">index_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="p">...&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">bool&lt;/span> &lt;span class="n">_arr&lt;/span>&lt;span class="p">[]&lt;/span> &lt;span class="p">{&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">some_expression&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)...&lt;/span> &lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">(&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="n">_arr&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;strong>Note&lt;/strong>: Here, the order of evaluation inside the braces is guaranteed, unlike function arguments.&lt;/p>
+&lt;h2 id="fold-expressions">Fold expressions
+&lt;/h2>&lt;p>Fold expressions provide a much nicer way of doing pack iteration and (when combined with &lt;code>std::integer_sequence&lt;/code>) compile time loop.
+Here&amp;rsquo;s a class template which applies a generic function over an integer sequence, expanded at compile time:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">ForInts&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span> &lt;span class="n">IntT&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">IntT&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">ForInts&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">integer_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">IntT&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">Is&lt;/span>&lt;span class="p">...&lt;/span>&lt;span class="o">&amp;gt;&amp;gt;&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span> &lt;span class="n">F&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">static&lt;/span> &lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">apply&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">F&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">f&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">(&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">integral_constant&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">IntT&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">Is&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">{})),&lt;/span> &lt;span class="p">...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">auto&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">using&lt;/span> &lt;span class="n">ForSeq&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">ForInts&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">make_integer_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">decltype&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">&amp;gt;&amp;gt;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The &lt;code>ForSeq&lt;/code> alias template generates an integer sequence as the template parameter for &lt;code>ForInts&lt;/code>.
+The &lt;code>ForInts&lt;/code> class template&amp;rsquo;s &lt;code>apply()&lt;/code> method applies a given function object over the indices,
+by comma-folding over the function expression. It employs the same &lt;code>std::integral_constant&lt;/code> trick.
+The &lt;code>void&lt;/code> cast is there to deal with overloaded &lt;code>operator,&lt;/code>.&lt;/p>
+&lt;p>Example usage:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">ostringstream&lt;/span> &lt;span class="n">ss&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">ForSeq&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="mi">10&lt;/span>&lt;span class="o">&amp;gt;::&lt;/span>&lt;span class="n">apply&lt;/span>&lt;span class="p">([&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">ss&lt;/span>&lt;span class="p">](&lt;/span>&lt;span class="k">auto&lt;/span> &lt;span class="n">i&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">i&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">value&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">ss&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;Start!&lt;/span>&lt;span class="se">\n&lt;/span>&lt;span class="s">&amp;#34;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ss&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;loop: &amp;#34;&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">i&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">value&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="sc">&amp;#39; &amp;#39;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">});&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>This is a much more natural way of implementing and writing compile-time loops.&lt;/p>
+&lt;p>Using &lt;code>std::make_integer_sequence&lt;/code> often involves an indirection to a separate &lt;code>impl&lt;/code> function or class, which catches the actual integer list.
+With explicit lambda template in C++20, we could replace the &lt;code>impl&lt;/code> function with an inner lambda:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">size_t&lt;/span> &lt;span class="n">N&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">do_something&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">[]&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">template&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">size_t&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">index_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="p">...&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// fold over Is...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="p">}(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">make_index_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">{});&lt;/span> &lt;span class="c1">// IIFE
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h2 id="runtime-break-from-the-loop-short-circuiting">Runtime break from the loop (short-circuiting)
+&lt;/h2>&lt;p>What if we want to break half-way from the compile time loop, depending on some runtime condition?
+It&amp;rsquo;s trivial to achieve with logical folds, since the &lt;code>&amp;amp;&amp;amp;&lt;/code> and &lt;code>||&lt;/code> operators in C++ has short-circuiting behavior.&lt;/p>
+&lt;p>A partial demo:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;span class="lnt">9
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span> &lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">size_t&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">fn&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">index_sequence&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Is&lt;/span>&lt;span class="p">...&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">([]()&lt;/span> &lt;span class="o">-&amp;gt;&lt;/span> &lt;span class="kt">bool&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// do something, return true or false
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// return true if the loop should be continued.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// return false if not.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="p">}()&lt;/span> &lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="p">...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The above &lt;code>fn()&lt;/code> function will evaluate all folded expressions (here, the expression is an IIFE returning either &lt;code>true&lt;/code> or &lt;code>false&lt;/code>). If at some point the IIFE returns &lt;code>false&lt;/code>, all remaining expressions will be skipped.&lt;/p>
+&lt;h1 id="sidenote-implementation-of-stdmake_integer_sequence">Sidenote: Implementation of &lt;code>std::make_integer_sequence&lt;/code>
+&lt;/h1>&lt;p>Many compile-time loop patterns ultimately boils down to &lt;code>std::make_integer_sequence&lt;/code> (or equivalent).&lt;/p>
+&lt;p>A naive implementation is one-by-one template recursion. Something smarter would be $\log_2(N)$ recursion, which obviously works by dividing by half every iteration.&lt;/p>
+&lt;p>Since &lt;code>std::make_integer_sequence&lt;/code> is ubiquitous in template metaprogramming, some compilers implement
+it with magic intrinsics.&lt;/p>
+&lt;ul>
+&lt;li>MSVC and Clang: &lt;code>__make_integer_seq&lt;/code>&lt;/li>
+&lt;li>GCC: &lt;code>__integer_pack&lt;/code>&lt;/li>
+&lt;/ul></description></item><item><title>Type erasure and polymorphic interface objects</title><link>https://kya8.github.io/p/type-erasure-and-polymorphic-interface-objects/</link><pubDate>Tue, 11 Jul 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/type-erasure-and-polymorphic-interface-objects/</guid><description>&lt;h1 id="runtime-polymorphism-in-c">Runtime polymorphism in C++
+&lt;/h1>&lt;p>The canonical way of doing runtime polymorphism in C++ has always been virtual functions and inheritance. Compared to alternative solutions found in other languages, such as:&lt;/p>
+&lt;ul>
+&lt;li>Interface in Go&lt;/li>
+&lt;li>Trait object in Rust&lt;/li>
+&lt;/ul>
+&lt;p>, the virtual function plus inheritance approach is often considered inferior, for the following reasons:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>Intrusive design&lt;/strong>: All implementers of an interface must inherit from it.
+The implementation object also has to make room for the vtable!&lt;/li>
+&lt;li>&lt;strong>Mandates reference semantics&lt;/strong>: You can only use the interface polymorphically through pointers or references.
+A factory function has to return &lt;code>std::unique_ptr&amp;lt;InterfaceType&amp;gt;&lt;/code>, which is messy. (To be fair, interface objects also require dynamic allocation internally)&lt;/li>
+&lt;li>&lt;strong>Performance cost&lt;/strong>: They are often found to be slower than alternatives.&lt;/li>
+&lt;/ul>
+&lt;h1 id="polymorphic-object">polymorphic object
+&lt;/h1>&lt;p>A polymorphic object type defines a set of methods. Such object can then store another object of abitary type, that implements the defined set of methods.&lt;/p>
+&lt;p>People have been writing such implementations for years, such as &lt;a class="link" href="https://github.com/facebook/folly/blob/main/folly/docs/Poly.md" target="_blank" rel="noopener"
+>Poly&lt;/a>, &lt;a class="link" href="https://github.com/ldionne/dyno" target="_blank" rel="noopener"
+>dyno&lt;/a>, &lt;a class="link" href="https://github.com/microsoft/proxy" target="_blank" rel="noopener"
+>proxy&lt;/a>.&lt;/p>
+&lt;h2 id="type-erasure">Type erasure
+&lt;/h2>&lt;p>Actually, we already have a limited form of polymorphic object in C++: &lt;code>std::function&lt;/code>.
+It only knows about the &lt;code>operator()&lt;/code>, but the idea is similar: Use type-erasure.&lt;/p>
+&lt;p>For polymorphic objects, we need to keep the function pointers somewhere, but for potentially multiple member methods.&lt;/p>
+&lt;blockquote>
+&lt;p>To be continued&amp;hellip;&lt;/p>
+&lt;/blockquote></description></item><item><title>Type erasure in C++</title><link>https://kya8.github.io/p/type-erasure-in-c-/</link><pubDate>Tue, 11 Jul 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/type-erasure-in-c-/</guid><description>&lt;h1 id="type-erasure">Type erasure
+&lt;/h1>&lt;p>Type erasure is a generic concept in progamming, where different types can be hidden behind a single, generic interface.
+You probably already did type erasure in C: passing &lt;code>void*&lt;/code> pointer around and casting them!
+This is a simple case of type erasure, which is not type safe. A tagged union also counts, although it only provides erasure for a pre-defined set of types.&lt;/p>
+&lt;h1 id="stdfunction">std::function
+&lt;/h1>&lt;p>&lt;code>std::function&amp;lt;R(Args...)&amp;gt;&lt;/code> is a type-erased polymorphic function object that can wrap all kinds of callables with the specified argument types &lt;code>Args...&lt;/code> and a return type that is convertible to &lt;code>R&lt;/code>.
+It stores the provided callable by (forwarding) copy/move. Dynamic allocation is required in the general case, however implementations may use SBO (Small Buffer optimization).&lt;/p>
+&lt;p>It&amp;rsquo;s suitable for use at API boundaries, e.g. when providing a callback.&lt;/p>
+&lt;h2 id="implementation">Implementation
+&lt;/h2>&lt;p>The actual type erasure happens inside the constructor. Besides storing the callable type-erased (either by dynamic allocation or SBO), &lt;code>std::function&lt;/code> needs to record information about how to
+do &lt;code>operator()&lt;/code> later. Since &lt;code>std::function&lt;/code> is copyable, it also needs to remember how to copy the callable!&lt;/p>
+&lt;p>There&amp;rsquo;s even more: If SBO is in effect, to move an &lt;code>std::function&lt;/code> would require invoking the callable&amp;rsquo;s move constructor. Otherwise we just move the pointer.&lt;/p>
+&lt;p>All of these has to be done inside the constructor of &lt;code>std::function&lt;/code> since the type information of the callable is only available there.
+Here&amp;rsquo;s a limited implementation I wrote. It has no SBO, and doesn&amp;rsquo;t support all kinds of callables (e.g. member function pointers):&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;span class="lnt">18
+&lt;/span>&lt;span class="lnt">19
+&lt;/span>&lt;span class="lnt">20
+&lt;/span>&lt;span class="lnt">21
+&lt;/span>&lt;span class="lnt">22
+&lt;/span>&lt;span class="lnt">23
+&lt;/span>&lt;span class="lnt">24
+&lt;/span>&lt;span class="lnt">25
+&lt;/span>&lt;span class="lnt">26
+&lt;/span>&lt;span class="lnt">27
+&lt;/span>&lt;span class="lnt">28
+&lt;/span>&lt;span class="lnt">29
+&lt;/span>&lt;span class="lnt">30
+&lt;/span>&lt;span class="lnt">31
+&lt;/span>&lt;span class="lnt">32
+&lt;/span>&lt;span class="lnt">33
+&lt;/span>&lt;span class="lnt">34
+&lt;/span>&lt;span class="lnt">35
+&lt;/span>&lt;span class="lnt">36
+&lt;/span>&lt;span class="lnt">37
+&lt;/span>&lt;span class="lnt">38
+&lt;/span>&lt;span class="lnt">39
+&lt;/span>&lt;span class="lnt">40
+&lt;/span>&lt;span class="lnt">41
+&lt;/span>&lt;span class="lnt">42
+&lt;/span>&lt;span class="lnt">43
+&lt;/span>&lt;span class="lnt">44
+&lt;/span>&lt;span class="lnt">45
+&lt;/span>&lt;span class="lnt">46
+&lt;/span>&lt;span class="lnt">47
+&lt;/span>&lt;span class="lnt">48
+&lt;/span>&lt;span class="lnt">49
+&lt;/span>&lt;span class="lnt">50
+&lt;/span>&lt;span class="lnt">51
+&lt;/span>&lt;span class="lnt">52
+&lt;/span>&lt;span class="lnt">53
+&lt;/span>&lt;span class="lnt">54
+&lt;/span>&lt;span class="lnt">55
+&lt;/span>&lt;span class="lnt">56
+&lt;/span>&lt;span class="lnt">57
+&lt;/span>&lt;span class="lnt">58
+&lt;/span>&lt;span class="lnt">59
+&lt;/span>&lt;span class="lnt">60
+&lt;/span>&lt;span class="lnt">61
+&lt;/span>&lt;span class="lnt">62
+&lt;/span>&lt;span class="lnt">63
+&lt;/span>&lt;span class="lnt">64
+&lt;/span>&lt;span class="lnt">65
+&lt;/span>&lt;span class="lnt">66
+&lt;/span>&lt;span class="lnt">67
+&lt;/span>&lt;span class="lnt">68
+&lt;/span>&lt;span class="lnt">69
+&lt;/span>&lt;span class="lnt">70
+&lt;/span>&lt;span class="lnt">71
+&lt;/span>&lt;span class="lnt">72
+&lt;/span>&lt;span class="lnt">73
+&lt;/span>&lt;span class="lnt">74
+&lt;/span>&lt;span class="lnt">75
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">Ptrs&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">void&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="n">deleter_ptr&lt;/span>&lt;span class="p">)(&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">void&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="n">copy_ptr&lt;/span>&lt;span class="p">)(&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">class&lt;/span> &lt;span class="nc">T&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">TypePointers&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">constexpr&lt;/span> &lt;span class="k">static&lt;/span> &lt;span class="n">Ptrs&lt;/span> &lt;span class="n">ptrs&lt;/span>&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">[](&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">p&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">delete&lt;/span> &lt;span class="k">static_cast&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">*&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">p&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">},&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">[](&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">p&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="n">T&lt;/span>&lt;span class="p">{&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="k">static_cast&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">*&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">p&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">Func&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span> &lt;span class="n">R&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">typename&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">Args&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">Func&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">R&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Args&lt;/span>&lt;span class="p">...)&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">void&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">ptr&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">nullptr&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">const&lt;/span> &lt;span class="n">Ptrs&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">func_ptrs&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">R&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="n">call_ptr&lt;/span>&lt;span class="p">)(&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">Args&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span>&lt;span class="p">...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// needs to disallow same type, otherwise shadows the copy ctor... Also causes inifinite loops
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span> &lt;span class="n">T&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">typename&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">enable_if_t&lt;/span>&lt;span class="o">&amp;lt;!&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">is_same_v&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Func&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">decay_t&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">Func&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">t&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">ptr&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">decay_t&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">t&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">func_ptrs&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">TypePointers&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">decay_t&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&amp;gt;::&lt;/span>&lt;span class="n">ptrs&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">call_ptr&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[](&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">p&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">Args&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span>&lt;span class="p">...&lt;/span> &lt;span class="n">args&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">-&amp;gt;&lt;/span> &lt;span class="n">R&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">is_void_v&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">R&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// the Args types are not deduced. This is not typical perfect-forwarding...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">R&lt;/span>&lt;span class="p">)(&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="k">static_cast&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">decay_t&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;*&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">p&lt;/span>&lt;span class="p">))(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Args&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="p">)...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span> &lt;span class="k">else&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="k">static_cast&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">decay_t&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;*&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">p&lt;/span>&lt;span class="p">))(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Args&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="p">)...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">~&lt;/span>&lt;span class="n">Func&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">func_ptrs&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">deleter_ptr&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">ptr&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">R&lt;/span> &lt;span class="nf">operator&lt;/span>&lt;span class="p">()(&lt;/span>&lt;span class="n">Args&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">struct&lt;/span> &lt;span class="nc">EmptyFunc&lt;/span>&lt;span class="p">{};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">ptr&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">throw&lt;/span> &lt;span class="n">EmptyFunc&lt;/span>&lt;span class="p">{};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="n">call_ptr&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">ptr&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Args&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="p">)...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// copy
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">Func&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">const&lt;/span> &lt;span class="n">Func&lt;/span>&lt;span class="o">&amp;amp;&lt;/span> &lt;span class="n">f&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="n">ptr&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">func_ptrs&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">copy_ptr&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ptr&lt;/span>&lt;span class="p">)),&lt;/span> &lt;span class="n">func_ptrs&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">func_ptrs&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">call_ptr&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">call_ptr&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// move
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">Func&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Func&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="n">f&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="n">ptr&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ptr&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">func_ptrs&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">func_ptrs&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">call_ptr&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">f&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">call_ptr&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">f&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">ptr&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">nullptr&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">int&lt;/span> &lt;span class="nf">main&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">using&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">cout&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">endl&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">int&lt;/span> &lt;span class="n">ans&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">42&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">Func&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">int&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">char&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">func&lt;/span>&lt;span class="p">{[&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="p">](&lt;/span>&lt;span class="kt">char&lt;/span> &lt;span class="n">c&lt;/span>&lt;span class="p">){&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="n">ans&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="n">c&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span> &lt;span class="n">func2&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">move&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">func&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">cout&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">func2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">2&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">endl&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">Func&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">short&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">char&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">f3&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="n">func2&lt;/span>&lt;span class="p">};&lt;/span> &lt;span class="c1">// nested func
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">cout&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">f3&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">3&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">endl&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>It&amp;rsquo;s a rough demo only, but you get the idea: &amp;ldquo;remember&amp;rdquo; how to do things later by storing function pointers.&lt;/p>
+&lt;p>&lt;code>ptr&lt;/code> is the stored callable.
+&lt;code>func_ptrs&lt;/code> is a group of function pointers, for managing stored callable of type &lt;code>T&lt;/code>.
+&lt;code>call_ptr&lt;/code> records how to call the type-erased callable.&lt;/p>
+&lt;p>Another implementation would be an abstract base functor, which defines the virtual &lt;code>operator()&lt;/code> with desired return type and arg types. In fact we&amp;rsquo;ve just implemented something similar to vtables!&lt;/p>
+&lt;h2 id="performance">Performance
+&lt;/h2>&lt;p>The performance cost mainly stems from dynamic allocation and function pointer redirections.&lt;/p>
+&lt;h1 id="stdany">&lt;code>std::any&lt;/code>
+&lt;/h1>&lt;p>As its name suggests, &lt;code>std::any&lt;/code> is a &lt;em>container&lt;/em>, that can wrap an object of any type. The type info is checked on access, so it can provide type safety, compared to &lt;code>void*&lt;/code>.&lt;/p>
+&lt;p>Like other &lt;em>containers&lt;/em>, &lt;code>std::any&lt;/code> manages storage on its own. Since the size of the object can be arbitary, it generally requires dynamic allocation (so it&amp;rsquo;s more expensive compared to &lt;code>std::variant&lt;/code>).&lt;/p>
+&lt;p>The implementation of &lt;code>any_cast&lt;/code> requires no RTTI, since &lt;code>std::any&lt;/code> does not need to know the exact type of the contained object, it only needs to check if the requested type matches the actual type when doing &lt;code>any_cast&lt;/code>. This is typically achieved by storing a pointer to a static member function of a class template that is instantiated by the stored type. Comparing types is thus equivalent to comparing pointers to templated functions.&lt;/p>
+&lt;p>That being said, &lt;code>std::any::type()&lt;/code> is available for obtaining runtime typeinfo of the contained object (It does require RTTI, by storing type_info). This allows flexible visitation.&lt;/p>
+&lt;h1 id="stdshared_ptr">&lt;code>std::shared_ptr&lt;/code>
+&lt;/h1>&lt;p>What has &lt;code>std::shared_ptr&lt;/code> to do with type-erasure? Well, it stores the deleter and allocator type-erased, inside the shared control block, so it&amp;rsquo;s only templated by the object type.&lt;/p>
+&lt;p>In a typical implementation, &lt;code>shared_ptr&lt;/code> holds only two pointers: one to the shared object, one to the &amp;ldquo;control block&amp;rdquo; that is also shared by all replicated instances. The control block will hold the pointer to the managed object (or the object itself), the deletor and the allocator (both are type-erased), and the ref-counting numbers.&lt;/p>
+&lt;p>A generic deleter can be supplied during construction, then stored (type-erased) inside the control block.&lt;/p>
+&lt;h1 id="stdvariant">&lt;code>std::variant&lt;/code>
+&lt;/h1>&lt;p>A type-safe union. An instance of &lt;code>std::variant&lt;/code> at any given time either holds a value of one of its alternative types, or in the case of error - no value.&lt;/p>
+&lt;p>As with unions, if a variant holds a value of some object type &lt;code>T&lt;/code>, the object representation of &lt;code>T&lt;/code> is directly within the object representation of the variant itself. Variant is not allowed to allocate additional (dynamic) memory.
+It&amp;rsquo;s usually implemented with placement new, on a buffer that is large enough to hold all kinds of elements, and has appropriate alignment. Or a tagged union.&lt;/p>
+&lt;h2 id="visitation">Visitation
+&lt;/h2>&lt;p>&lt;code>std::visit&lt;/code> works on &lt;code>std::variant&lt;/code> by taking a generic callable that can be applied to any type held by the variant object. If the visitor function is not exhaustive, you get a compile time error.
+This allows unified, type-safe operations on &lt;code>std::variant&lt;/code> objects.&lt;/p>
+&lt;h3 id="implementation-1">Implementation
+&lt;/h3>&lt;p>A typical implementation can generate (at compile time) a table of function pointers to the resolved/instantiated function for every value type of the variant. At runtime, the stored type index is used to select the right function.&lt;/p>
+&lt;p>Again, function pointers!&lt;/p>
+&lt;h1 id="other-sum-types">Other sum types
+&lt;/h1>&lt;p>&lt;code>std::optional&lt;/code>, &lt;code>std::expected&lt;/code>, &amp;hellip;&lt;/p>
+&lt;h1 id="type-erased-iterator">Type-erased iterator
+&lt;/h1>&lt;p>E.g. &lt;code>boost::any_range&lt;/code>, &lt;code>any_iter&lt;/code>. Such iterators wraps any iterator that satisfy some behaviors, such as being forward iterators. They&amp;rsquo;re especially useful at API boundaries, to provide support for abitary iterator/ranges, without using templates.&lt;/p></description></item><item><title>The `noexcept` move constructor</title><link>https://kya8.github.io/p/the-noexcept-move-constructor/</link><pubDate>Sun, 25 Jun 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/the-noexcept-move-constructor/</guid><description>&lt;p>In most situations, the move constructor of a class in C++ can be made to not throw exceptions, given the &lt;a class="link" href="https://en.cppreference.com/w/cpp/language/rule_of_three" target="_blank" rel="noopener"
+>Rule of 0/3/5&lt;/a> is respected. When Rule of 0 is followed, any non-trivial move operation should ultimately trace down to lowest-level resource-owning classes, and such classes are usually simple to move (e.g. copy a pointer), so their move ctors can be made &lt;code>noexcept&lt;/code>.&lt;/p>
+&lt;p>The compiler-generated move-constructor for a class is implicitly &lt;code>noexcept&lt;/code>, unless its base/member&amp;rsquo;s move-constructors are potentially throwing.
+If you forgot to make your own class&amp;rsquo;s move ctor &lt;code>noexecpt&lt;/code>, or use a defaulted potentially throwing move ctor (because a member&amp;rsquo;s move ctor is throwing), then this property will pass on.&lt;/p>
+&lt;p>Why should we make the move ctors &lt;code>noexcept&lt;/code>, besides &amp;ldquo;because we can&amp;rdquo;? Because failing to provide &lt;code>noexcept&lt;/code> move ctors can be a missed optimization.&lt;/p>
+&lt;h1 id="stdvector-resize">&lt;code>std::vector&lt;/code> resize
+&lt;/h1>&lt;p>&lt;code>std::vector&amp;lt;T&amp;gt;::resize()&lt;/code> will potentially relocate the elements, by move if possible, while providing strong exception safety guarantee:&lt;/p>
+&lt;ol>
+&lt;li>If &lt;code>T&lt;/code>&amp;rsquo;s move ctor is &lt;code>noexcept&lt;/code>, then move the elements to new location.&lt;/li>
+&lt;li>else, the move ctor is potentially throwing, and a nothrow copy ctor is available, the elements will be copied(!)&lt;/li>
+&lt;li>else, use the throwing move ctor. The exception guarantee is waived.&lt;/li>
+&lt;/ol>
+&lt;p>If &lt;code>T&lt;/code> somehow is not nothrow movable, a potential full copy will be made when relocation happens!&lt;/p>
+&lt;h2 id="stddeque">&lt;code>std::deque&lt;/code>
+&lt;/h2>&lt;p>&lt;code>std::deque&lt;/code> will not relocate its elements, if push/pop happens at the front/end. So in most cases this is less of an issue.&lt;/p>
+&lt;h1 id="stdfunction-and-sbo">&lt;code>std::function&lt;/code> and SBO
+&lt;/h1>&lt;p>&lt;code>std::function&lt;/code> implementations often employ small buffer optimization (SBO) in order to avoid dynamic allocation incurred by type erasure, if the size of the callable fits in.&lt;/p>
+&lt;p>Without SBO, &lt;code>std::function&lt;/code>&amp;rsquo;s move constructor is trivial, you only move the (type-erased) pointer, so it&amp;rsquo;s always &lt;code>noexcept&lt;/code>. However if SBO is in effect, the callable is stored inline so itself has to undergo move. If the callable is not nothrow movable, neither will be the &lt;code>std::function&lt;/code> holding it.&lt;/p>
+&lt;p>Before ISO C++20, &lt;code>std::function&lt;/code>&amp;rsquo;s move ctor is not marked &lt;code>noexcept&lt;/code>.&lt;/p>
+&lt;p>Some implementations will choose to disable SBO if the callable&amp;rsquo;s type is not nothrow movable, in order to provide strengthened &lt;code>noexcept&lt;/code> move for &lt;code>std::function&lt;/code>.&lt;/p>
+&lt;h1 id="further-reading">further reading
+&lt;/h1>&lt;ul>
+&lt;li>&lt;a class="link" href="https://ibob.bg/blog/2018/07/03/compiler-generated-move" target="_blank" rel="noopener"
+>https://ibob.bg/blog/2018/07/03/compiler-generated-move&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://quuxplusone.github.io/blog/2019/03/27/design-space-for-std-function/" target="_blank" rel="noopener"
+>https://quuxplusone.github.io/blog/2019/03/27/design-space-for-std-function/&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>C++ Concurrency in Action</title><link>https://kya8.github.io/p/c-concurrency-in-action/</link><pubDate>Fri, 09 Jun 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/c-concurrency-in-action/</guid><description>&lt;h1 id="related-resources">Related resources
+&lt;/h1>&lt;p>Talks:&lt;/p>
+&lt;ul>
+&lt;li>&lt;a class="link" href="https://www.youtube.com/watch?v=A8eCGOqgvH4" target="_blank" rel="noopener"
+>Herb Sutter - Atomic Weapons&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://www.youtube.com/watch?v=c1gO9aB9nbs" target="_blank" rel="noopener"
+>Herb Sutter - Lock-Free Programming (or, Juggling Razor Blades)&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>(Im)perfect forwarding</title><link>https://kya8.github.io/p/imperfect-forwarding/</link><pubDate>Tue, 30 May 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/imperfect-forwarding/</guid><description>&lt;h1 id="brief-recap-on-perfect-forwarding">Brief recap on perfect forwarding
+&lt;/h1>&lt;h2 id="reference-collapsing-and-type-deduction">Reference collapsing and type deduction
+&lt;/h2>&lt;p>There is no reference-to-reference types in C++: such type declarations would just collapse to a normal reference.
+Depending on the type of the reference, the final type is a lvalue-ref if one of the refs is lvalue-ref, otherwise a rvalue-ref.&lt;/p>
+&lt;p>The reference collapsing rule enables deduction of &lt;em>forwarding references&lt;/em>:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span> &lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">decltype&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">auto&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">func&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">arg&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="nf">func_inner&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">arg&lt;/span>&lt;span class="p">)...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The type &lt;code>T&lt;/code> will be either a value type w/o reference, or an lvalue-ref, such that the collapsed &lt;code>T&amp;amp;&amp;amp;&lt;/code> type will match the &lt;em>value categories&lt;/em> of arguments.&lt;/p>
+&lt;h2 id="stdforwardt">&lt;code>std::forward&amp;lt;T&amp;gt;&lt;/code>
+&lt;/h2>&lt;p>It effectively returns &lt;code>T&amp;amp;&amp;amp;&lt;/code> reference to its arguments. According to the rules of the value categories of function expressions, if &lt;code>T&amp;amp;&amp;amp;&lt;/code> is rvalue-ref, the forward expression is itself an rvalue.
+Otherwise &lt;code>T&amp;amp;&amp;amp;&lt;/code> was deduced to lvalue-ref, the forward expression is an lvalue. Therefore, &lt;code>std::forward&lt;/code> always forward arguments as their original value categories.&lt;/p>
+&lt;p>&lt;strong>The &lt;code>std::forward&amp;lt;T&amp;gt;&lt;/code> function template is meant to be used within deduced contexts&lt;/strong>, i.e. where the type &lt;code>T&lt;/code> has been deduced (either as a type template parameter &lt;code>T&amp;amp;&amp;amp;&lt;/code>, or &lt;code>auto&amp;amp;&amp;amp;&lt;/code>).
+You should NOT let it deduce &lt;code>T&lt;/code> via its argument, this is not how it works!&lt;/p>
+&lt;p>Luckily, the C++ standard specifies the signatures as &lt;code>T&amp;amp;&amp;amp; forward( typename std::remove_reference&amp;lt;T&amp;gt;::type&amp;amp; t )&lt;/code> and &lt;code>T&amp;amp;&amp;amp; forward( typename std::remove_reference&amp;lt;T&amp;gt;::type&amp;amp;&amp;amp; t )&lt;/code>.
+This makes type deduction on &lt;code>T&lt;/code> impossible, so using &lt;code>std::forward&lt;/code> without specifying template parameter is a compile-time error.&lt;/p>
+&lt;h1 id="imperfect-forwarding">Imperfect forwarding
+&lt;/h1>&lt;p>This title is somewhat clickbaity. Here we discuss some workarounds and unusual ways of using perfect forwarding.&lt;/p>
+&lt;h2 id="use-without-templates">Use without templates
+&lt;/h2>&lt;p>Often we want a function to accept both rvalue and lvalue arguments. Sometimes we just write 2 separate definitions for this (e.g. move and copy constructor), because they&amp;rsquo;re rightfully different.
+However, these two overloads can sometimes be quite duplicated. To avoid code duplication:&lt;/p>
+&lt;ol>
+&lt;li>
+&lt;p>A quick-and-dirty approach is to always pass by value, then move. This incurs one additional move:&lt;/p>
+&lt;ul>
+&lt;li>For the lvalue-ref overload, this means copy first, then move.&lt;/li>
+&lt;li>For rvalue-ref overload, this means move twice.&lt;/li>
+&lt;/ul>
+&lt;p>This method is acceptable when moving is cheap.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>Always forward to an internal function template that takes forwarding reference, and let it deduce the type.
+Use &lt;code>std::forward&amp;lt;T&amp;gt;&lt;/code> inside the function template. Since the function is only used internally, we don&amp;rsquo;t need to check its arg type.&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;h2 id="variadic-forward-in-init-capture">Variadic forward in init-capture
+&lt;/h2>&lt;p>&lt;em>&lt;strong>Note&lt;/strong>&lt;/em>: We&amp;rsquo;re talking about capturing by copy or move, not by reference.&lt;/p>
+&lt;p>Since C++14, init-capture enables lambdas to capture (by value) by move, or by forwarding:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// within some template that deduces T
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">val&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">val&lt;/span>&lt;span class="p">)]{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>This only works one-by-one. What if we want to forward a parameter pack?&lt;/p>
+&lt;p>With C++20, it&amp;rsquo;s simple:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="p">[...&lt;/span>&lt;span class="n">vals&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Ts&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">vals&lt;/span>&lt;span class="p">)]{}&lt;/span> &lt;span class="c1">//...
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Before C++20, tuples are your friend: (perfectly) forward the parameter pack into a tuple, then unpack the tuple inside the lambda:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="p">[&lt;/span>&lt;span class="n">vals&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">make_tuple&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Ts&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">vals&lt;/span>&lt;span class="p">)...)]&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// use the vals, via std::apply:
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">apply&lt;/span>&lt;span class="p">([](&lt;/span>&lt;span class="k">auto&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span> &lt;span class="p">...&lt;/span>&lt;span class="n">args&lt;/span>&lt;span class="p">){&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// use args as you want
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="p">},&lt;/span> &lt;span class="n">vals&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;code>std::make_tuple&lt;/code> will make a by-value tuple, initialized by forwarding the &lt;code>vals&lt;/code>.
+We unpack the tuple with &lt;code>std::apply&lt;/code>.&lt;/p>
+&lt;h2 id="use-in-non-deduced-context">Use in non-deduced context
+&lt;/h2>&lt;p>Although &lt;code>std::forward&lt;/code> is designed for deduced contexts, it can sometimes be useful in non-deduced scenarios.&lt;/p>
+&lt;p>For example, the &lt;code>R operator()(Args... args)&lt;/code> of &lt;code>std::function&amp;lt;R(Args...)&amp;gt;&lt;/code> effectively does &lt;code>INVOKE&amp;lt;R&amp;gt;(f, std::forward&amp;lt;Args&amp;gt;(args)...)&lt;/code>, where &lt;code>f&lt;/code> is the stored callable.
+We known that the &lt;code>Args&lt;/code> is specified by the user, not deduced.
+However, it still makes sense to forward &lt;code>args...&lt;/code> with &lt;code>std::forward&amp;lt;Args&amp;gt;&lt;/code>:&lt;/p>
+&lt;ul>
+&lt;li>If some &lt;code>Arg&lt;/code> has some value type, then the &lt;code>operator()&lt;/code> receives it by value. Inside &lt;code>operator()&lt;/code>, we do want to pass it as an rvalue.&lt;/li>
+&lt;li>If &lt;code>Arg&lt;/code> has rvalue/lvalue type, then the additional forwarding has no effect.&lt;/li>
+&lt;/ul></description></item><item><title>Semantic const</title><link>https://kya8.github.io/p/semantic-const/</link><pubDate>Fri, 19 May 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/semantic-const/</guid><description>&lt;h1 id="semantic-const">Semantic const
+&lt;/h1>&lt;p>Imagine we have a class with some getter/observer method that is protected by a mutex:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">class&lt;/span> &lt;span class="nc">DataWrapper&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">private&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">DataType&lt;/span> &lt;span class="n">data_&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">mutex&lt;/span> &lt;span class="n">mtx_&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">//...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="k">public&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">DataType&lt;/span> &lt;span class="n">getData&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">//...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">DataType&lt;/span> &lt;span class="n">DataWrapper&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">getData&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">scoped_lock&lt;/span> &lt;span class="n">lk&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">mtx_&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="n">data_&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The lock operation on the mutex cannot work on a const &lt;code>*this&lt;/code>, so the &lt;code>getData()&lt;/code> method cannot be made &lt;code>const&lt;/code>.
+This contradicts our usual assumption of a getter method, how can an observer be non-const?&lt;/p>
+&lt;p>After all, the non-constness comes from the implementation of &lt;code>getData()&lt;/code>, which requires locking the mutex, thus modifying one of the members.
+However, the &lt;em>interface&lt;/em> being non-const is still suboptimal. What if we implement &lt;code>getData()&lt;/code> with &lt;code>std::atomic&amp;lt;T&amp;gt;::load&lt;/code>, which is &lt;code>const&lt;/code>? The &lt;em>interface&lt;/em> declaration should be orthogonal to implementation details.&lt;/p>
+&lt;p>If we insist on keeping the mutex as a direct data member, the solution is to mark &lt;code>mtx_&lt;/code> as &lt;code>mutable&lt;/code>, so it&amp;rsquo;s mutable even with const &lt;code>*this&lt;/code>. This way, we achieve &lt;em>semantic&lt;/em> const, so the user of the API can hold their usual assumptions.&lt;/p>
+&lt;h2 id="const-overloading">const overloading
+&lt;/h2>&lt;p>Const overloading is mostly used when returning a reference/pointer to some data within(or managed by) an object.
+An example is the &lt;code>operator[]&lt;/code> of &lt;code>std::vector&lt;/code>, which returns const reference when the vector itself is const, or non-const reference otherwise.&lt;/p>
+&lt;p>For &lt;code>std::vector&lt;/code>, the &lt;code>const&lt;/code> overload is semantic only. Because, it&amp;rsquo;s perfectly valid to return a pointer to non-const value, that is managed by a &lt;code>const std::vector&lt;/code> ref.
+However, since &lt;code>std::vector&lt;/code> is a standard container type that manages data on its own, we want it to have value semantics: If the vector is const, so should be the elements managed by it.&lt;/p>
+&lt;h3 id="avoid-code-duplication">Avoid code duplication
+&lt;/h3>&lt;p>When you starting providing const overloads, you&amp;rsquo;ll likely run into lots of duplicated code, for the &lt;code>const&lt;/code> and non-&lt;code>const&lt;/code> overloads.&lt;/p>
+&lt;p>We can re-use the &lt;code>const&lt;/code> methods in the non-&lt;code>const&lt;/code> overload, by forcing constness on &lt;code>*this&lt;/code>, and returning the result as mutable reference. For the former we have &lt;code>std::as_const&lt;/code>. Below is an implementation of &lt;code>as_mut&lt;/code> (Sorry, I took the nomenclature from Rust):&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span> &lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="k">auto&lt;/span>&lt;span class="o">&amp;amp;&lt;/span> &lt;span class="n">as_mut&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;amp;&lt;/span> &lt;span class="n">t&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">noexcept&lt;/span> &lt;span class="c1">// T can be const or non-const
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="k">const_cast&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">remove_const_t&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&amp;amp;&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">t&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// This overload disallows any rvalue argument
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">typename&lt;/span> &lt;span class="n">T&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">as_mut&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">const&lt;/span> &lt;span class="n">T&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">delete&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h2 id="semantic-non-const">Semantic non-const
+&lt;/h2>&lt;p>Sometimes things go the opposite direction: A method modifies some internal state via a pointer/reference member, so it only requires const &lt;code>*this&lt;/code>, e.g. in a PIMPL class. In such circumstances, we still might want to mark the method as non-const, when the object actually owns the referenced data, &lt;strong>since the managed data is semantically part of the object itself&lt;/strong>.&lt;/p>
+&lt;h3 id="const-views-shallow-constness">const views, shallow constness
+&lt;/h3>&lt;p>However, if the object is merely a non-owning view into some referenced data, it makes more sense to use &amp;ldquo;shallow&amp;rdquo; constness, i.e. the underlying data is mutable through a const view object.
+&lt;code>std::span&amp;lt;T&amp;gt;&lt;/code> is one example of shallow constness.&lt;/p></description></item><item><title>IIFE in C++</title><link>https://kya8.github.io/p/iife-in-c-/</link><pubDate>Mon, 15 May 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/iife-in-c-/</guid><description>&lt;h1 id="the-const-problem">The const problem
+&lt;/h1>&lt;p>In many cases, we want to define a variable that is complex to initialize. Often, this is done like the following:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="kt">int&lt;/span> &lt;span class="n">some_var&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// complex code to fill the final value of some_var
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// from now on, some_var should not be modified
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>This forbids the use of &lt;code>const&lt;/code> on the variable without creating another intermediate variable.
+Also, this cannot be used in member initialization lists in a constructor definition.&lt;/p>
+&lt;p>This is often the primary obstacle when enforcing const-correctness.&lt;/p>
+&lt;p>An obviously solution is to define a function dedicated for the complex initialization process.
+And this is indeed the right direction if this subroutine is used at multiple places. Otherwise, an IIFE is preferred:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span> &lt;span class="n">some_var&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="p">]()&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// do whatever, optionally use outer variables.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}();&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The in-place lambda invocation can always be inlined, so it shouldn&amp;rsquo;t affect performance. This pattern also captures surrounding states seamlessly: If we were to use a dedicated function, all states required for initialization have to be passed via function parameters.&lt;/p>
+&lt;h1 id="the-ternary-operator">The ternary operator
+&lt;/h1>&lt;p>When the initialization is only dependent on a &lt;em>&lt;strong>runtime&lt;/strong>&lt;/em> binary condition, The ternary operator also works, and is more concise than an IIFE.&lt;/p>
+&lt;p>However they&amp;rsquo;re not equivalent, in case we&amp;rsquo;d like to make use of a compile time condition:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">bool&lt;/span> &lt;span class="n">cond&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">TRUE_OR_FALSE&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span> &lt;span class="n">i1&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">cond&lt;/span>&lt;span class="o">?&lt;/span> &lt;span class="mi">0&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span> &lt;span class="n">i2&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">cond&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">return&lt;/span> &lt;span class="s">&amp;#34;i&amp;#39;m a string&amp;#34;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">else&lt;/span> &lt;span class="k">return&lt;/span> &lt;span class="mi">42&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span> &lt;span class="n">i3&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">cond&lt;/span>&lt;span class="o">?&lt;/span> &lt;span class="s">&amp;#34;i&amp;#39;m a string&amp;#34;&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="mi">42&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// does not compile.
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;code>i1&lt;/code> is an &lt;code>int&lt;/code>; &lt;code>i2&lt;/code> will be either &lt;code>const char*&lt;/code> or &lt;code>int&lt;/code> depending on &lt;code>cond&lt;/code>.
+&lt;code>i3&lt;/code> will simply fail to compile.
+That&amp;rsquo;s because the ternary expression takes a runtime condition,
+it&amp;rsquo;s equivalent to an IIFE with plain &lt;code>if else&lt;/code> branches.&lt;/p>
+&lt;p>In generic code, where the resultant type can depend on some compile time condition, use IIFE
+with &lt;code>if constexpr&lt;/code>.&lt;/p>
+&lt;h1 id="for-control-flow">For control flow
+&lt;/h1>&lt;p>Sometimes it&amp;rsquo;s just convenient to be able to use &lt;code>return&lt;/code> for control flow, e.g. to avoid &lt;code>goto&lt;/code>.
+If the return type is &lt;code>void&lt;/code>, it&amp;rsquo;s equivalent to a &lt;code>do {...} while(0)&lt;/code> block.&lt;/p>
+&lt;h1 id="turn-statements-into-expression">Turn statements into expression
+&lt;/h1>&lt;p>As you can see, IIFE is particularly useful for converting a series of statements into an expression.
+(Well, normally we&amp;rsquo;ll have to wrap them inside another function. IIFE just spares us from writing a separate function for this purpose.)&lt;/p>
+&lt;p>IIFE provides a generic way to wrap statements into expression (more generic than using ternary expressions and comma operator),
+and use it where only expressions are allowed, e.g. in comma fold expressions:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">class&lt;/span> &lt;span class="err">...&lt;/span>&lt;span class="nc">Ts&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Ts&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span>&lt;span class="p">...&lt;/span> &lt;span class="n">arg&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">([&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">is_same_v&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">decay_t&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Ts&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">cout&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;!!!NextWeHaveAString!!!:&amp;#34;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">cout&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Ts&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">arg&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;, &amp;#34;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}(),&lt;/span> &lt;span class="p">...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">int&lt;/span> &lt;span class="nf">main&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mf">1.0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">2&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;abc&amp;#34;&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h2 id="everything-is-an-expression">Everything is an expression!
+&lt;/h2>&lt;p>This emulates e.g. block expressions in Rust.&lt;/p>
+&lt;h1 id="use-with-stdoptional">Use with &lt;code>std::optional&lt;/code>
+&lt;/h1>&lt;p>There&amp;rsquo;s another hidden spot in the const problem: What if &lt;code>some_var&lt;/code> should not be initialized at all?
+E.g., depending on the condition, &lt;code>some_var&lt;/code> might become meaningless, so we should not define it at all.&lt;/p>
+&lt;p>This is a common pattern that plagues C++ programs:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">SomeComplexStruct&lt;/span> &lt;span class="n">var&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// default initialized...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="k">const&lt;/span> &lt;span class="kt">bool&lt;/span> &lt;span class="n">init_success&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">init_complex_struct&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">var&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>if &lt;code>init_success&lt;/code> is false, &lt;code>var&lt;/code> shouldn&amp;rsquo;t be there at all. However we&amp;rsquo;re left with a zombie
+variable that is default-initialized.&lt;/p>
+&lt;p>This is a much broader topic regarding RAII and class invariants, and there&amp;rsquo;re many solutions/opinions to it, including using throwing constructors,
+factories that returns nullable pointers/values.
+For the purpose of this article, we could use an IIFE that returns an &lt;code>std::optional&lt;/code>,
+and check for null on the result.&lt;/p></description></item><item><title>Rule of 0/3/5</title><link>https://kya8.github.io/p/rule-of-0/3/5/</link><pubDate>Wed, 18 Jan 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/rule-of-0/3/5/</guid><description>&lt;h1 id="the-rule-of-035">The rule of 0/3/5
+&lt;/h1>&lt;p>A C++ class that manages some non-RAII resource/object (e.g., &lt;code>FILE*&lt;/code>) would require a user-defined dtor.
+Also, such resource generically cannot be copied plainly. Most of the time, this either disallows copying, or requires special handling.&lt;/p>
+&lt;p>Such classes are direct (i.e. it doesn&amp;rsquo;t contain another RAII wrapper object), exclusive resource managers.&lt;/p>
+&lt;p>&lt;strong>On the other hand, if a class is not one of such classes, it should not have custom destructors, copy/move constructors or copy/move assignment operators.
+Let RAII do its thing! Only the lowest-level resource manager classes (where all the special handling actually happens) would need those.&lt;/strong>&lt;/p>
+&lt;p>With these in mind, the rule of 0/3/5 becomes obvious:&lt;/p>
+&lt;h2 id="rule-of-three">Rule of three
+&lt;/h2>&lt;p>If a class requires a user-defined destructor, a user-defined copy constructor, or a user-defined copy assignment operator, it almost certainly requires all three!
+Because it certainly manages some non-RAII resource handle, otherwise it wouldn&amp;rsquo;t require those.&lt;/p>
+&lt;h2 id="rule-of-zero">Rule of zero
+&lt;/h2>&lt;p>Classes that have custom destructors, copy/move constructors or copy/move assignment operators should deal exclusively with ownership (which follows from the Single Responsibility Principle). Other classes should not have custom destructors, copy/move constructors or copy/move assignment operators.&lt;/p>
+&lt;p>This rule also appears in the C++ Core Guidelines: If you can avoid defining default operations, do.&lt;/p>
+&lt;h2 id="rule-of-five">Rule of five
+&lt;/h2>&lt;p>Because the presence of a user-defined destructor, copy-constructor, or copy-assignment operator prevents implicit definition of the move constructor and the move assignment operator,
+any class for which move semantics are desirable, has to declare all five special member functions.&lt;/p>
+&lt;p>Unlike Rule of Three, failing to provide move constructor and move assignment is usually not an error, but a missed optimization opportunity.&lt;/p></description></item><item><title>Pointers (again)</title><link>https://kya8.github.io/p/pointers-again/</link><pubDate>Wed, 04 Jan 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/pointers-again/</guid><description>&lt;h1 id="pointer-arithmetics">Pointer arithmetics
+&lt;/h1>&lt;p>It is well-known that in both C and C++, pointer arithmetics is only meaningful for operands (and the imaginary resultant pointer address) that are related to each other.
+By related we mean, they both point to the same object (or one-past-end), or the same array (or one-past-end).&lt;/p>
+&lt;p>Per C++ standard, pointers are &lt;em>iterators&lt;/em>, not &lt;em>numbers representing address space&lt;/em>, although they&amp;rsquo;re often implemented as such.&lt;/p>
+&lt;p>To quote &lt;a class="link" href="https://stackoverflow.com/a/56038995/17815599" target="_blank" rel="noopener"
+>https://stackoverflow.com/a/56038995/17815599&lt;/a>:&lt;/p>
+&lt;blockquote>
+&lt;p>Speaking more academically: &lt;strong>pointers are not numbers&lt;/strong>. They are pointers.&lt;/p>
+&lt;p>It is true that a pointer on your system is implemented as a numerical representation of an address-like representation of a location in some abstract kind of memory (probably a virtual, per-process memory space).&lt;/p>
+&lt;p>But C++ doesn&amp;rsquo;t care about that. C++ wants you to think of pointers as post-its, as bookmarks, to specific objects. The numerical address values are just a side-effect. The &lt;em>only&lt;/em> arithmetic that makes sense on a pointer is &lt;em>forwards and backwards&lt;/em> through an array of objects; nothing else is philosophically meaningful.&lt;/p>
+&lt;/blockquote>
+&lt;p>So, &lt;code>p1 - p0&lt;/code> isn&amp;rsquo;t really saying &amp;ldquo;give me the difference between the addresses pointed by &lt;code>p1&lt;/code> and &lt;code>p0&lt;/code>&amp;rdquo;,
+it&amp;rsquo;s saying &amp;ldquo;Assuming they both refer to objects in the same array, what&amp;rsquo;s the difference between their indices inside the array?&amp;rdquo;
+(Here, we consider a single object as an array of length one). If the assumption does not hold, this is undefined behavior.
+For relational (greater than, less than&amp;hellip;) comparisons however, the behavior is &lt;em>unspecified&lt;/em>.&lt;/p>
+&lt;h2 id="what-are-arrays">what are &amp;ldquo;arrays&amp;rdquo;?
+&lt;/h2>&lt;p>It covers a bit wider than normal (i.e. &lt;code>int arr[]&lt;/code>) arrays.
+In particular, pointer returned by &lt;code>malloc&lt;/code> can be addressed as arrays.&lt;/p>
+&lt;p>Also see &lt;a class="link" href="https://stackoverflow.com/questions/47830449/can-you-do-arithmetic-on-a-char-pointing-at-another-object" target="_blank" rel="noopener"
+>https://stackoverflow.com/questions/47830449/can-you-do-arithmetic-on-a-char-pointing-at-another-object&lt;/a> for aliasing &lt;code>char*&lt;/code> pointers.&lt;/p>
+&lt;h2 id="pointer-to-struct-member">pointer to struct member
+&lt;/h2>&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">xyz_s&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">float&lt;/span> &lt;span class="n">x&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">y&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">z&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">xyz_s&lt;/span> &lt;span class="n">pt&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">auto&lt;/span> &lt;span class="n">px&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">pt&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">x&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">auto&lt;/span> &lt;span class="n">py&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">px&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="mi">1&lt;/span> &lt;span class="c1">// ???
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;code>xyz&lt;/code> is standard-layout type, which means it has C-like memory layout. However in this example, &lt;em>even if the struct &lt;code>xyz_s&lt;/code> does not contain any paddings&lt;/em>, &lt;code>py&lt;/code> does not actually point to &lt;code>pt.y&lt;/code>. It points to &amp;ldquo;one-past-end&amp;rdquo; of &lt;code>pt.x&lt;/code>!
+That&amp;rsquo;s because there&amp;rsquo;re no arrays here, so &lt;code>py&lt;/code> can only be the &amp;ldquo;one-past-end&amp;rdquo; pointer of &lt;code>pt.x&lt;/code>. Although evaluating &lt;code>px+1&lt;/code> is well-defined, dereferencing the resultant &lt;code>py&lt;/code> is UB. It&amp;rsquo;s not &lt;code>pt.y&lt;/code>!&lt;/p>
+&lt;p>If we change &lt;code>xyz_s&lt;/code> to contain an array of 3 floats, that kind of pointer arithmetic is okay. Also absence of padding in array is guaranteed.&lt;/p>
+&lt;h3 id="padding">Padding
+&lt;/h3>&lt;p>Actually, the compiler is free to insert paddings inside a struct in an implementation-defined way, &lt;strong>except at the beginning&lt;/strong> of a struct. There&amp;rsquo;s nothing in the standard mandating no paddings in &lt;code>xyz_s&lt;/code>!&lt;/p>
+&lt;p>This is also why there&amp;rsquo;s no guaranteed size for &lt;code>std::array&amp;lt;T, N&amp;gt;&lt;/code>. Even if it only contains a single member &lt;code>T data_[N]&lt;/code>, the compiler can still insert paddings after it.&lt;/p>
+&lt;h2 id="pointer-in-nested-arrays">pointer in nested arrays
+&lt;/h2>&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">Pt3&lt;/span> &lt;span class="p">{&lt;/span> &lt;span class="kt">float&lt;/span> &lt;span class="n">xyz&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">3&lt;/span>&lt;span class="p">];&lt;/span> &lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">vector&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">xyz_s&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">vec&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">auto&lt;/span> &lt;span class="n">p0x&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">vec&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">].&lt;/span>&lt;span class="n">xyz&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">];&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">auto&lt;/span> &lt;span class="n">p0z&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">p0x&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="mi">2&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// okay
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="k">auto&lt;/span> &lt;span class="n">p1x&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">p0z&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// bad
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Here, &lt;code>p1x&lt;/code> is still one-past-end of &lt;code>vec[0].xyz[2]&lt;/code>. Because, there&amp;rsquo;s no array of type &lt;code>float&lt;/code> and length &lt;code>N*3&lt;/code>! And consider possible paddings mentioned above.&lt;/p>
+&lt;h1 id="pointer-to-first-member-of-standard-layout-struct">Pointer to first member of (standard layout) struct
+&lt;/h1>&lt;p>(By &amp;ldquo;first&amp;rdquo; we mean the first declared member)&lt;/p>
+&lt;p>Ref: &lt;a class="link" href="https://en.cppreference.com/w/cpp/language/static_cast#Pointer-interconvertible_objects" target="_blank" rel="noopener"
+>https://en.cppreference.com/w/cpp/language/static_cast#Pointer-interconvertible_objects&lt;/a>&lt;/p>
+&lt;p>Two objects a and b are &lt;em>pointer-interconvertible&lt;/em> if:&lt;/p>
+&lt;ul>
+&lt;li>they are the same object, or&lt;/li>
+&lt;li>one is a union object and the other is a non-static data member of that object, or&lt;/li>
+&lt;li>one is a standard-layout class object and the other is the first non-static data member of that object or any base class subobject of that object, or&lt;/li>
+&lt;li>there exists an object c such that a and c are pointer-interconvertible, and c and b are pointer-interconvertible.&lt;/li>
+&lt;/ul>
+&lt;p>&amp;hellip;combined with pointer conversion rules, it&amp;rsquo;s possible to convert between pointer to a standard-layout struct and pointer to its first member, via an intermediate &lt;code>void*&lt;/code> pointer.&lt;/p>
+&lt;h1 id="pointer-total-order">Pointer total order
+&lt;/h1>&lt;p>There is actually one exception to the &amp;ldquo;same-object-or-array&amp;rdquo; rule: the total order of pointers in C++.
+It only applies to comparison functors, &lt;code>std::less&lt;/code>, &lt;code>std::greater&lt;/code> etc. This total order is consistent with defined pointer comparison rules of the built-in comparison operators.
+For the unspecified case, the result becomes implementation-defined.&lt;/p>
+&lt;p>Note that in C, relational comparison of unrelated pointers is &lt;em>undefined&lt;/em>.&lt;/p></description></item><item><title>The PIMPL idiom</title><link>https://kya8.github.io/p/the-pimpl-idiom/</link><pubDate>Sat, 03 Dec 2022 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/the-pimpl-idiom/</guid><description>&lt;h1 id="problem-with-private">Problem with &lt;code>private&lt;/code>
+&lt;/h1>&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">class&lt;/span> &lt;span class="nc">MyClass&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">private&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="cm">/* internal implementation details */&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">public&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="cm">/* public stuff meant to be exported */&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Problems:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>private&lt;/code> stuff included in header, breaking encapsulation
+&lt;ul>
+&lt;li>Undesired disclosure for proprietary projects&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>Additional headers needed by &lt;code>private&lt;/code> stuff, are included in header
+&lt;ul>
+&lt;li>Some 3rd-party headers do funky things&lt;/li>
+&lt;li>Increased compilation time&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>Breaks ABI, since whenever &lt;code>private&lt;/code> changes, the class ABI might change as well&lt;/li>
+&lt;/ul>
+&lt;h2 id="using-functions">Using functions
+&lt;/h2>&lt;p>C allows true encapsulation via &lt;em>&lt;strong>opaque struct&lt;/strong>&lt;/em> pointers. But what if I still want to use classes?&lt;/p>
+&lt;h1 id="enter-pimpl">Enter PIMPL
+&lt;/h1>&lt;blockquote>
+&lt;p>Short for Pointer to Implementation&lt;/p>
+&lt;/blockquote>
+&lt;p>The header file would look like:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">class&lt;/span> &lt;span class="nc">MyClass&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">public&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// public methods go here
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">~&lt;/span>&lt;span class="n">MyClass&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="k">noexcept&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// required
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">MyClass&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="cm">/* args to forward to Impl... */&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">private&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">struct&lt;/span> &lt;span class="nc">Impl&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">unique_ptr&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Impl&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">pimpl&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The actual implementation class &lt;code>MyClass::Impl&lt;/code> is only forward-declared in the header.
+This requires us to forward-declare the destructor of &lt;code>MyClass&lt;/code>, otherwise the compiler generated definition will attempt to call the dtor of &lt;code>Impl&lt;/code>, which is not declared in this header.&lt;/p>
+&lt;p>The source file:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">MyClass&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">Impl&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// define the actual members here.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">Impl&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="cm">/* args... */&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">~&lt;/span>&lt;span class="n">Impl&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="k">noexcept&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// define it
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">MyClass&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="cm">/* args... */&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="n">pimpl&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">make_unique&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Impl&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="cm">/* args... */&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{}&lt;/span> &lt;span class="c1">// always use make_unique
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="o">~&lt;/span>&lt;span class="n">MyClass&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="k">noexcept&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">default&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// methods for public class
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="kt">void&lt;/span> &lt;span class="n">MyClass&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">someMethod&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// use pimpl-&amp;gt;...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Always use &lt;code>unique_ptr&lt;/code> and &lt;code>std::make_unique&lt;/code> for PIMPL. DO NOT use a raw (or even &lt;code>void*&lt;/code>) pointer!&lt;/p>
+&lt;h2 id="copyable-pimpl-class">Copyable PIMPL class
+&lt;/h2>&lt;p>PIMPL classes are already move-able for free, because the &lt;code>unique_ptr&lt;/code> is move-able.
+To copy the actual &lt;code>Impl&lt;/code> object, the new &lt;code>MyClass&lt;/code> object should copy-construct its &lt;code>pimpl&lt;/code> member, provided the &lt;code>Impl&lt;/code> class is itself copyable.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// should be declared in the header first...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="n">MyClass&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">const&lt;/span> &lt;span class="n">MyClass&lt;/span>&lt;span class="o">&amp;amp;&lt;/span> &lt;span class="n">rhs&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="n">pimpl&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">make_unique&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Impl&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="n">rhs&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">pimpl&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h1 id="comparison-with-c20-modules">Comparison with C++20 modules
+&lt;/h1></description></item><item><title>Emulating ARM on QEMU, with UEFI</title><link>https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/</link><pubDate>Wed, 28 Jul 2021 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/</guid><description>&lt;p>Emulating ARM machines on QEMU hasn&amp;rsquo;t been straight-forward due to lack of a
+standardized way to configure the bootloader across different ARM boards. One
+had to extract the kernel image, and specify the boot options on the command
+line (&lt;code>-kernel&lt;/code>, &lt;code>-initrd&lt;/code>), so QEMU knows what to do with its machine-specific
+boot code.&lt;/p>
+&lt;p>We can make things easier with the help of UEFI (namely EDK2, with ARM support), so
+installing and booting Linux just works like on a x86 PC target.&lt;/p>
+&lt;h1 id="prerequisites">Prerequisites
+&lt;/h1>&lt;ul>
+&lt;li>QEMU system emulator for ARM.&lt;/li>
+&lt;li>EDK2 binaries for ARM. They can be extracted from the debian package
+&lt;code>qemu-efi-arm&lt;/code> or &lt;code>qemu-efi-aarch64&lt;/code>, depending on your target arch.&lt;/li>
+&lt;li>Official Debian installer iso for ARM.&lt;/li>
+&lt;/ul>
+&lt;h1 id="booting-the-installer">Booting the installer
+&lt;/h1>&lt;blockquote>
+&lt;p>&lt;strong>NOTE:&lt;/strong> This example is for arm32&lt;/p>
+&lt;/blockquote>
+&lt;p>First of all, create a new disk image via &lt;code>qemu-img&lt;/code>. Copy EDK2 FW binaries
+(&lt;code>AAVMF32_CODE.fd&lt;/code> and &lt;code>AAVMF32_VARS.fd&lt;/code>, the latter is for hosting volatile
+variables) and the installer image to the same directory.&lt;/p>
+&lt;p>We&amp;rsquo;ll be emulating the &lt;code>virt&lt;/code> board, which has support for virtio devices:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-text" data-lang="text">&lt;span class="line">&lt;span class="cl">qemu-system-arm -M virt -m 512M -cpu cortex-a15 \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-device qemu-xhci -device usb-kbd \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-device usb-storage,drive=install -blockdev file,filename=debian-testing-armhf-DVD-1.iso,node-name=install \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-blockdev qcow2,node-name=root,file.driver=file,file.filename=disk0.qcow2 -device virtio-blk-device,drive=root \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-nic user,model=virtio \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-pflash ./AAVMF32_CODE.fd -pflash ./AAVMF32_VARS.fd \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-device ramfb
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;ul>
+&lt;li>&lt;code>-device qemu-xhci -device usb-kbd&lt;/code> attaches a low-overhead USB XHCI bus, and
+a USB keyboard. You could add a mouse if needed. Alternatively, on-board USB support is available by passing &lt;code>-usb&lt;/code>.&lt;/li>
+&lt;li>Next two lines attach the installer iso as a USB storage device, and the
+rootfs disk as a virtio block device. (I think cdrom is unsupported, no?)&lt;/li>
+&lt;li>&lt;code>-nic user,model=virtio&lt;/code> enables basic user-mode networking, backed by the
+virtio NIC.&lt;/li>
+&lt;li>&lt;code>-device ramfb&lt;/code> adds a simple display device, which is just a frambuffer in
+guest memory. QEMU ARM system emulator does not emulate a display device by
+default. The standard &lt;code>std&lt;/code> VGA won&amp;rsquo;t work since the installer environment
+lacks required DRM kmods. &lt;em>&lt;strong>Note&lt;/strong>&lt;/em>: The serial console is also available.&lt;/li>
+&lt;/ul>
+&lt;p>The guest will now boot into the installer iso. Simply
+follow the installation instructions, the grub-efi bootloader will be installed to the EFI firmware automatically.&lt;/p>
+&lt;h1 id="booting-the-installed-system">Booting the installed system
+&lt;/h1>&lt;p>No additional configuration is required.
+Don&amp;rsquo;t forget to attach the UEFI firmware via &lt;code>-pflash&lt;/code>.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-text" data-lang="text">&lt;span class="line">&lt;span class="cl">qemu-system-arm -M virt -m 512M -cpu cortex-a15 \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-device qemu-xhci -device usb-kbd \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-blockdev qcow2,node-name=root,file.driver=file,file.filename=disk0.qcow2 -device virtio-blk-device,drive=root \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-nic user,model=virtio \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-pflash ./AAVMF32_CODE.fd -pflash ./AAVMF32_VARS.fd \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-device VGA
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;img src="https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/qemu-arm.png"
+width="1154"
+height="954"
+srcset="https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/qemu-arm_hu49b1d92aaa083d34304f9c2ce2d824c2_33988_480x0_resize_box_3.png 480w, https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/qemu-arm_hu49b1d92aaa083d34304f9c2ce2d824c2_33988_1024x0_resize_box_3.png 1024w"
+loading="lazy"
+alt="booted system"
+class="gallery-image"
+data-flex-grow="120"
+data-flex-basis="290px"
+>&lt;/p>
+&lt;p>Voilà! Your new virtual ARM system is ready to go!&lt;/p></description></item></channel></rss>
