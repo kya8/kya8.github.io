@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>C on Kya's Blog</title><link>https://kya8.github.io/tags/c/</link><description>Recent content in C on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Sun, 02 Jun 2024 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/c/index.xml" rel="self" type="application/rss+xml"/><item><title>Portable Signal handling</title><link>https://kya8.github.io/p/portable-signal-handling/</link><pubDate>Mon, 20 May 2024 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/portable-signal-handling/</guid><description>&lt;h1 id="stdsignal-and-signal-handlers">&lt;code>std::signal&lt;/code> and signal handlers
+&lt;/h1>&lt;p>The standard function &lt;code>std::signal&lt;/code> enables registering &lt;em>signal handlers&lt;/em> that are invoked when a given signal is delivered, asynchronously.
+Since the handler can interrupt the execution of the program at potentially any point, actions allowed in the handler are quite limited.
+In particular, the handler is allowed to access a global (with static storage duration) variable that is &lt;code>volatile std::sig_atomic_t&lt;/code> or lock-free &lt;code>std::atomic&amp;lt;...&amp;gt;&lt;/code>.
+This lets us set a flag inside the handler, and correctly check the flag outside the handler.
+Additionally, a signal handler can re-call &lt;code>std::signal&lt;/code> for the same signal that is currently being handled.&lt;/p>
+&lt;p>The POSIX standard specifies additional library functions that are guaranteed to be async-signal-safe, that is, safe to call from signal handlers (See &lt;code>man 7 signal-safety&lt;/code>).
+However on POSIX systems, the &lt;code>sigaction&lt;/code> family of functions should be preferred.&lt;/p>
+&lt;h1 id="portable-ways-to-catch-signals">Portable ways to catch signals
+&lt;/h1>&lt;p>Suppose we need to catch a signal and inform the program about it, so it can act accordingly. E.g., catching &lt;code>SIGINT&lt;/code> (&lt;code>Ctrl-C&lt;/code>) to perform graceful cleanup and shutdown.
+The canonical way of doing this is to have a dedicated thread that responds to a global flag, which shall be set by the signal handler.&lt;/p>
+&lt;p>Before C++20, there&amp;rsquo;s no platform-independent way, besides polling the flag repeatedly:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="k">static&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">atomic&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="kt">bool&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">flag&lt;/span>&lt;span class="p">{&lt;/span>&lt;span class="nb">false&lt;/span>&lt;span class="p">};&lt;/span> &lt;span class="c1">// assuming it&amp;#39;s lock-free
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">extern&lt;/span> &lt;span class="s">&amp;#34;C&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">signal_handler&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">sig&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">sig&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">SIGINT&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">store&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">true&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="nf">sigint_thread_fn&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="cm">/*...*/&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span> &lt;span class="c1">// demonstration only
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">while&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">load&lt;/span>&lt;span class="p">())&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">this_thread&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">sleep_for&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">chrono&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">milliseconds&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">100&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// precede to perform shutdown actions ...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// e.g., signaling the main thread to stop.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&amp;hellip;Because we don&amp;rsquo;t have a signal-safe function to wait on the atomic flag.&lt;/p>
+&lt;h2 id="stdatomictwait">&lt;code>std::atomic&amp;lt;T&amp;gt;::wait()&lt;/code>
+&lt;/h2>&lt;p>C++20 introduces &lt;code>wait()&lt;/code> and &lt;code>notify()&lt;/code> methods on &lt;code>std::atomic&amp;lt;T&amp;gt;&lt;/code> and &lt;code>std::atomic_flag&lt;/code>.
+If the atomic type is lock-free (which is always the case for &lt;code>std::atomic_flag&lt;/code>),
+we can safely use &lt;code>wait()&lt;/code> and &lt;code>notify()&lt;/code> in the waiting thread and the signal handler, to avoid the sleep-and-poll loop above.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="k">static&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">atomic_flag&lt;/span> &lt;span class="n">flag&lt;/span>&lt;span class="p">{};&lt;/span> &lt;span class="c1">// Always lock-free
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// C++20 guarantees it&amp;#39;s initialized to false
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">extern&lt;/span> &lt;span class="s">&amp;#34;C&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">signal_handler&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">sig&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">sig&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">SIGINT&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">test_and_set&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">notify_all&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="nf">sigint_thread_fn&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="cm">/*...*/&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">flag&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">wait&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">false&lt;/span>&lt;span class="p">);&lt;/span> &lt;span class="c1">// will block until flag has been changed.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// ...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h1 id="platform-dependent-ways">Platform-dependent ways
+&lt;/h1>&lt;h2 id="posix">POSIX
+&lt;/h2>&lt;p>Incrementing a POSIX semaphore (&lt;code>sem_post&lt;/code>) is signal-safe according to the POSIX specification.
+This can be used for notification in signal handlers. The waiting thread would wait via &lt;code>sem_wait&lt;/code>.&lt;/p>
+&lt;p>Alternatively there is &lt;code>sigwaitinfo&lt;/code> and &lt;code>sigwait&lt;/code>, which explicitly wait for pending signals.&lt;/p>
+&lt;p>If you&amp;rsquo;re on Linux, another alternative would be using &lt;code>signalfd&lt;/code> and waiting on the file descriptor (e.g. via &lt;code>epoll&lt;/code>).&lt;/p>
+&lt;h2 id="windows">Windows
+&lt;/h2></description></item><item><title>Pointers (again)</title><link>https://kya8.github.io/p/pointers-again/</link><pubDate>Wed, 04 Jan 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/pointers-again/</guid><description>&lt;h1 id="pointer-arithmetics">Pointer arithmetics
+&lt;/h1>&lt;p>It is well-known that in both C and C++, pointer arithmetics is only meaningful for operands (and the imaginary resultant pointer address) that are related to each other.
+By related we mean, they both point to the same object (or one-past-end), or the same array (or one-past-end).&lt;/p>
+&lt;p>Per C++ standard, pointers are &lt;em>iterators&lt;/em>, not &lt;em>numbers representing address space&lt;/em>, although they&amp;rsquo;re often implemented as such.&lt;/p>
+&lt;p>To quote &lt;a class="link" href="https://stackoverflow.com/a/56038995/17815599" target="_blank" rel="noopener"
+>https://stackoverflow.com/a/56038995/17815599&lt;/a>:&lt;/p>
+&lt;blockquote>
+&lt;p>Speaking more academically: &lt;strong>pointers are not numbers&lt;/strong>. They are pointers.&lt;/p>
+&lt;p>It is true that a pointer on your system is implemented as a numerical representation of an address-like representation of a location in some abstract kind of memory (probably a virtual, per-process memory space).&lt;/p>
+&lt;p>But C++ doesn&amp;rsquo;t care about that. C++ wants you to think of pointers as post-its, as bookmarks, to specific objects. The numerical address values are just a side-effect. The &lt;em>only&lt;/em> arithmetic that makes sense on a pointer is &lt;em>forwards and backwards&lt;/em> through an array of objects; nothing else is philosophically meaningful.&lt;/p>
+&lt;/blockquote>
+&lt;p>So, &lt;code>p1 - p0&lt;/code> isn&amp;rsquo;t really saying &amp;ldquo;give me the difference between the addresses pointed by &lt;code>p1&lt;/code> and &lt;code>p0&lt;/code>&amp;rdquo;,
+it&amp;rsquo;s saying &amp;ldquo;Assuming they both refer to objects in the same array, what&amp;rsquo;s the difference between their indices inside the array?&amp;rdquo;
+(Here, we consider a single object as an array of length one). If the assumption does not hold, this is undefined behavior.
+For relational (greater than, less than&amp;hellip;) comparisons however, the behavior is &lt;em>unspecified&lt;/em>.&lt;/p>
+&lt;h2 id="what-are-arrays">what are &amp;ldquo;arrays&amp;rdquo;?
+&lt;/h2>&lt;p>It covers a bit wider than normal (i.e. &lt;code>int arr[]&lt;/code>) arrays.
+In particular, pointer returned by &lt;code>malloc&lt;/code> can be addressed as arrays.&lt;/p>
+&lt;p>Also see &lt;a class="link" href="https://stackoverflow.com/questions/47830449/can-you-do-arithmetic-on-a-char-pointing-at-another-object" target="_blank" rel="noopener"
+>https://stackoverflow.com/questions/47830449/can-you-do-arithmetic-on-a-char-pointing-at-another-object&lt;/a> for aliasing &lt;code>char*&lt;/code> pointers.&lt;/p>
+&lt;h2 id="pointer-to-struct-member">pointer to struct member
+&lt;/h2>&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">xyz_s&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">float&lt;/span> &lt;span class="n">x&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">y&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">z&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">xyz_s&lt;/span> &lt;span class="n">pt&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">auto&lt;/span> &lt;span class="n">px&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">pt&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">x&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">auto&lt;/span> &lt;span class="n">py&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">px&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="mi">1&lt;/span> &lt;span class="c1">// ???
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;code>xyz&lt;/code> is standard-layout type, which means it has C-like memory layout. However in this example, &lt;em>even if the struct &lt;code>xyz_s&lt;/code> does not contain any paddings&lt;/em>, &lt;code>py&lt;/code> does not actually point to &lt;code>pt.y&lt;/code>. It points to &amp;ldquo;one-past-end&amp;rdquo; of &lt;code>pt.x&lt;/code>!
+That&amp;rsquo;s because there&amp;rsquo;re no arrays here, so &lt;code>py&lt;/code> can only be the &amp;ldquo;one-past-end&amp;rdquo; pointer of &lt;code>pt.x&lt;/code>. Although evaluating &lt;code>px+1&lt;/code> is well-defined, dereferencing the resultant &lt;code>py&lt;/code> is UB. It&amp;rsquo;s not &lt;code>pt.y&lt;/code>!&lt;/p>
+&lt;p>If we change &lt;code>xyz_s&lt;/code> to contain an array of 3 floats, that kind of pointer arithmetic is okay. Also absence of padding in array is guaranteed.&lt;/p>
+&lt;h3 id="padding">Padding
+&lt;/h3>&lt;p>Actually, the compiler is free to insert paddings inside a struct in an implementation-defined way, &lt;strong>except at the beginning&lt;/strong> of a struct. There&amp;rsquo;s nothing in the standard mandating no paddings in &lt;code>xyz_s&lt;/code>!&lt;/p>
+&lt;p>This is also why there&amp;rsquo;s no guaranteed size for &lt;code>std::array&amp;lt;T, N&amp;gt;&lt;/code>. Even if it only contains a single member &lt;code>T data_[N]&lt;/code>, the compiler can still insert paddings after it.&lt;/p>
+&lt;h2 id="pointer-in-nested-arrays">pointer in nested arrays
+&lt;/h2>&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">Pt3&lt;/span> &lt;span class="p">{&lt;/span> &lt;span class="kt">float&lt;/span> &lt;span class="n">xyz&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">3&lt;/span>&lt;span class="p">];&lt;/span> &lt;span class="p">};&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">vector&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">xyz_s&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">vec&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">N&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">auto&lt;/span> &lt;span class="n">p0x&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">vec&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">].&lt;/span>&lt;span class="n">xyz&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">];&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">auto&lt;/span> &lt;span class="n">p0z&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">p0x&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="mi">2&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// okay
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="k">auto&lt;/span> &lt;span class="n">p1x&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">p0z&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// bad
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Here, &lt;code>p1x&lt;/code> is still one-past-end of &lt;code>vec[0].xyz[2]&lt;/code>. Because, there&amp;rsquo;s no array of type &lt;code>float&lt;/code> and length &lt;code>N*3&lt;/code>! And consider possible paddings mentioned above.&lt;/p>
+&lt;h1 id="pointer-to-first-member-of-standard-layout-struct">Pointer to first member of (standard layout) struct
+&lt;/h1>&lt;p>(By &amp;ldquo;first&amp;rdquo; we mean the first declared member)&lt;/p>
+&lt;p>Ref: &lt;a class="link" href="https://en.cppreference.com/w/cpp/language/static_cast#Pointer-interconvertible_objects" target="_blank" rel="noopener"
+>https://en.cppreference.com/w/cpp/language/static_cast#Pointer-interconvertible_objects&lt;/a>&lt;/p>
+&lt;p>Two objects a and b are &lt;em>pointer-interconvertible&lt;/em> if:&lt;/p>
+&lt;ul>
+&lt;li>they are the same object, or&lt;/li>
+&lt;li>one is a union object and the other is a non-static data member of that object, or&lt;/li>
+&lt;li>one is a standard-layout class object and the other is the first non-static data member of that object or any base class subobject of that object, or&lt;/li>
+&lt;li>there exists an object c such that a and c are pointer-interconvertible, and c and b are pointer-interconvertible.&lt;/li>
+&lt;/ul>
+&lt;p>&amp;hellip;combined with pointer conversion rules, it&amp;rsquo;s possible to convert between pointer to a standard-layout struct and pointer to its first member, via an intermediate &lt;code>void*&lt;/code> pointer.&lt;/p>
+&lt;h1 id="pointer-total-order">Pointer total order
+&lt;/h1>&lt;p>There is actually one exception to the &amp;ldquo;same-object-or-array&amp;rdquo; rule: the total order of pointers in C++.
+It only applies to comparison functors, &lt;code>std::less&lt;/code>, &lt;code>std::greater&lt;/code> etc. This total order is consistent with defined pointer comparison rules of the built-in comparison operators.
+For the unspecified case, the result becomes implementation-defined.&lt;/p>
+&lt;p>Note that in C, relational comparison of unrelated pointers is &lt;em>undefined&lt;/em>.&lt;/p></description></item></channel></rss>

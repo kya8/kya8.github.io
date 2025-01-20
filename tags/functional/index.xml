@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Functional on Kya's Blog</title><link>https://kya8.github.io/tags/functional/</link><description>Recent content in Functional on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Sat, 02 Mar 2024 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/functional/index.xml" rel="self" type="application/rss+xml"/><item><title>IIFE in C++</title><link>https://kya8.github.io/p/iife-in-c-/</link><pubDate>Mon, 15 May 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/iife-in-c-/</guid><description>&lt;h1 id="the-const-problem">The const problem
+&lt;/h1>&lt;p>In many cases, we want to define a variable that is complex to initialize. Often, this is done like the following:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="kt">int&lt;/span> &lt;span class="n">some_var&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// complex code to fill the final value of some_var
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// from now on, some_var should not be modified
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>This forbids the use of &lt;code>const&lt;/code> on the variable without creating another intermediate variable.
+Also, this cannot be used in member initialization lists in a constructor definition.&lt;/p>
+&lt;p>This is often the primary obstacle when enforcing const-correctness.&lt;/p>
+&lt;p>An obviously solution is to define a function dedicated for the complex initialization process.
+And this is indeed the right direction if this subroutine is used at multiple places. Otherwise, an IIFE is preferred:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span> &lt;span class="n">some_var&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="p">]()&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// do whatever, optionally use outer variables.
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="p">}();&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The in-place lambda invocation can always be inlined, so it shouldn&amp;rsquo;t affect performance. This pattern also captures surrounding states seamlessly: If we were to use a dedicated function, all states required for initialization have to be passed via function parameters.&lt;/p>
+&lt;h1 id="the-ternary-operator">The ternary operator
+&lt;/h1>&lt;p>When the initialization is only dependent on a &lt;em>&lt;strong>runtime&lt;/strong>&lt;/em> binary condition, The ternary operator also works, and is more concise than an IIFE.&lt;/p>
+&lt;p>However they&amp;rsquo;re not equivalent, in case we&amp;rsquo;d like to make use of a compile time condition:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">constexpr&lt;/span> &lt;span class="kt">bool&lt;/span> &lt;span class="n">cond&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">TRUE_OR_FALSE&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span> &lt;span class="n">i1&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">cond&lt;/span>&lt;span class="o">?&lt;/span> &lt;span class="mi">0&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span> &lt;span class="n">i2&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">[&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">cond&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">return&lt;/span> &lt;span class="s">&amp;#34;i&amp;#39;m a string&amp;#34;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">else&lt;/span> &lt;span class="k">return&lt;/span> &lt;span class="mi">42&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span> &lt;span class="n">i3&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">cond&lt;/span>&lt;span class="o">?&lt;/span> &lt;span class="s">&amp;#34;i&amp;#39;m a string&amp;#34;&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="mi">42&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// does not compile.
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;code>i1&lt;/code> is an &lt;code>int&lt;/code>; &lt;code>i2&lt;/code> will be either &lt;code>const char*&lt;/code> or &lt;code>int&lt;/code> depending on &lt;code>cond&lt;/code>.
+&lt;code>i3&lt;/code> will simply fail to compile.
+That&amp;rsquo;s because the ternary expression takes a runtime condition,
+it&amp;rsquo;s equivalent to an IIFE with plain &lt;code>if else&lt;/code> branches.&lt;/p>
+&lt;p>In generic code, where the resultant type can depend on some compile time condition, use IIFE
+with &lt;code>if constexpr&lt;/code>.&lt;/p>
+&lt;h1 id="for-control-flow">For control flow
+&lt;/h1>&lt;p>Sometimes it&amp;rsquo;s just convenient to be able to use &lt;code>return&lt;/code> for control flow, e.g. to avoid &lt;code>goto&lt;/code>.
+If the return type is &lt;code>void&lt;/code>, it&amp;rsquo;s equivalent to a &lt;code>do {...} while(0)&lt;/code> block.&lt;/p>
+&lt;h1 id="turn-statements-into-expression">Turn statements into expression
+&lt;/h1>&lt;p>As you can see, IIFE is particularly useful for converting a series of statements into an expression.
+(Well, normally we&amp;rsquo;ll have to wrap them inside another function. IIFE just spares us from writing a separate function for this purpose.)&lt;/p>
+&lt;p>IIFE provides a generic way to wrap statements into expression (more generic than using ternary expressions and comma operator),
+and use it where only expressions are allowed, e.g. in comma fold expressions:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">template&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="k">class&lt;/span> &lt;span class="err">...&lt;/span>&lt;span class="nc">Ts&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Ts&lt;/span>&lt;span class="o">&amp;amp;&amp;amp;&lt;/span>&lt;span class="p">...&lt;/span> &lt;span class="n">arg&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">([&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="nf">constexpr&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">is_same_v&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">decay_t&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Ts&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">cout&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;!!!NextWeHaveAString!!!:&amp;#34;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">cout&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">forward&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">Ts&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">arg&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;, &amp;#34;&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}(),&lt;/span> &lt;span class="p">...);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kt">int&lt;/span> &lt;span class="nf">main&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mf">1.0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">2&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;abc&amp;#34;&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h2 id="everything-is-an-expression">Everything is an expression!
+&lt;/h2>&lt;p>This emulates e.g. block expressions in Rust.&lt;/p>
+&lt;h1 id="use-with-stdoptional">Use with &lt;code>std::optional&lt;/code>
+&lt;/h1>&lt;p>There&amp;rsquo;s another hidden spot in the const problem: What if &lt;code>some_var&lt;/code> should not be initialized at all?
+E.g., depending on the condition, &lt;code>some_var&lt;/code> might become meaningless, so we should not define it at all.&lt;/p>
+&lt;p>This is a common pattern that plagues C++ programs:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-cpp" data-lang="cpp">&lt;span class="line">&lt;span class="cl">&lt;span class="k">struct&lt;/span> &lt;span class="nc">SomeComplexStruct&lt;/span> &lt;span class="n">var&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="c1">// default initialized...
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="k">const&lt;/span> &lt;span class="kt">bool&lt;/span> &lt;span class="n">init_success&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">init_complex_struct&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">var&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>if &lt;code>init_success&lt;/code> is false, &lt;code>var&lt;/code> shouldn&amp;rsquo;t be there at all. However we&amp;rsquo;re left with a zombie
+variable that is default-initialized.&lt;/p>
+&lt;p>This is a much broader topic regarding RAII and class invariants, and there&amp;rsquo;re many solutions/opinions to it, including using throwing constructors,
+factories that returns nullable pointers/values.
+For the purpose of this article, we could use an IIFE that returns an &lt;code>std::optional&lt;/code>,
+and check for null on the result.&lt;/p></description></item></channel></rss>
