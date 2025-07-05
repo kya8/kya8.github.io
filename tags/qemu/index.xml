@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Qemu on Kya's Blog</title><link>https://kya8.github.io/tags/qemu/</link><description>Recent content in Qemu on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Tue, 12 Mar 2024 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/qemu/index.xml" rel="self" type="application/rss+xml"/><item><title>Qemu windows guest best practices</title><link>https://kya8.github.io/p/qemu-windows-guest-best-practices/</link><pubDate>Tue, 12 Mar 2024 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/qemu-windows-guest-best-practices/</guid><description>&lt;p>(这只是一个记录贴. 最近又需要在Linux机器上弄一台Windows开发虚拟机, 遂翻出了几年前的记录, 并针对较新的Qemu版本做了一些更新.)&lt;/p>
+&lt;h1 id="tldr">TL;DR
+&lt;/h1>&lt;p>Qemu命令行参数:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;span class="lnt">18
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">qemu-system-x86_64 -accel kvm -machine q35 -name windows &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>-cpu host,hv_relaxed,hv_spinlocks&lt;span class="o">=&lt;/span>0x1fff,hv_vapic,hv_vpindex,hv_synic,hv_time,hv_stimer,hv_tlbflush,hv_tlbflush_ext,hv_ipi,hv_stimer_direct,hv_runtime,hv_frequencies,hv_reenlightenment,hv_avic,hv_xmm_input,hv_evmcs &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>-smp &lt;span class="nv">sockets&lt;/span>&lt;span class="o">=&lt;/span>1,cores&lt;span class="o">=&lt;/span>8,threads&lt;span class="o">=&lt;/span>&lt;span class="m">1&lt;/span> &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>-m 8G &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>-rtc &lt;span class="nv">base&lt;/span>&lt;span class="o">=&lt;/span>localtime &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>-drive &lt;span class="k">if&lt;/span>&lt;span class="o">=&lt;/span>pflash,format&lt;span class="o">=&lt;/span>raw,readonly&lt;span class="o">=&lt;/span>on,file&lt;span class="o">=&lt;/span>OVMF_CODE.fd -drive &lt;span class="k">if&lt;/span>&lt;span class="o">=&lt;/span>pflash,format&lt;span class="o">=&lt;/span>raw,file&lt;span class="o">=&lt;/span>OVMF_VARS.fd &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>-device virtio-balloon &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>-vga none -device virtio-vga &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>&lt;span class="c1"># qxl: -device qxl-vga,xres=1920,yres=1080,vgamem_mb=32&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-audiodev pipewire,id&lt;span class="o">=&lt;/span>snd0 -device ich9-intel-hda -device hda-output,audiodev&lt;span class="o">=&lt;/span>snd0 &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>-device qemu-xhci,id&lt;span class="o">=&lt;/span>xhci -device usb-tablet &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>-drive &lt;span class="nv">file&lt;/span>&lt;span class="o">=&lt;/span>disk0.qcow2,if&lt;span class="o">=&lt;/span>virtio,discard&lt;span class="o">=&lt;/span>unmap &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>-nic user,model&lt;span class="o">=&lt;/span>virtio-net-pci,guestfwd&lt;span class="o">=&lt;/span>tcp::1080-tcp:127.0.0.1:1080 &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>&lt;span class="c1"># virtiofs share&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-object memory-backend-memfd,id&lt;span class="o">=&lt;/span>mem,size&lt;span class="o">=&lt;/span>8G,share&lt;span class="o">=&lt;/span>on -numa node,memdev&lt;span class="o">=&lt;/span>mem -chardev socket,id&lt;span class="o">=&lt;/span>char0,path&lt;span class="o">=&lt;/span>/tmp/vm-share -device vhost-user-fs-pci,chardev&lt;span class="o">=&lt;/span>char0,tag&lt;span class="o">=&lt;/span>my-share &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>&lt;span class="c1"># For installing Windows&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-drive &lt;span class="nv">file&lt;/span>&lt;span class="o">=&lt;/span>windows.iso,index&lt;span class="o">=&lt;/span>2,media&lt;span class="o">=&lt;/span>cdrom &lt;span class="se">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="se">&lt;/span>-drive &lt;span class="nv">file&lt;/span>&lt;span class="o">=&lt;/span>virtio-win.iso,index&lt;span class="o">=&lt;/span>3,media&lt;span class="o">=&lt;/span>cdrom
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Virtiofsd:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">/usr/libexec/virtiofsd --socket-path&lt;span class="o">=&lt;/span>/tmp/virtiofs-share.sock --shared-dir /path/to/shared/dir
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h1 id="关于qemu命令行">关于Qemu命令行
+&lt;/h1>&lt;p>推荐阅读: &lt;a class="link" href="https://archive.fosdem.org/2018/schedule/event/vai_qemu_jungle/" target="_blank" rel="noopener"
+>https://archive.fosdem.org/2018/schedule/event/vai_qemu_jungle/&lt;/a>&lt;/p>
+&lt;p>Qemu的一些选项经常让新手困惑, 主要原因其实就是:&lt;/p>
+&lt;ol>
+&lt;li>
+&lt;p>Qemu模拟的每个虚拟设备都由host backend和guest device两部分组成. 两部分一般用一个名字(id)相联系.
+诸如&lt;code>-nic&lt;/code>, &lt;code>-drive&lt;/code>之类的选项只是为了便利提供的shortcut, 能够同时配置两部分.&lt;/p>
+&lt;p>例如, &lt;code>-nic user,model=virtio-net-pci&lt;/code>的完整写法是&lt;code>--device virtio-net-pci,netdev=n1 --netdev user,id=n1&lt;/code>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>Qemu的一个system emulator一般会有一些默认模拟的设备, 即使不加任何命令行参数都会被模拟. 例如, x86的system emulator默认会模拟一个vga显卡等.&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;h1 id="参数说明">参数说明
+&lt;/h1>&lt;h2 id="芯片组和cpu">芯片组和CPU
+&lt;/h2>&lt;p>x86-64上一般使用q35机型即可.
+&lt;code>-cpu host&lt;/code>表示使用主机的CPU型号, 并且会开启对应的指令集支持. 后面的一串&lt;code>hv_*&lt;/code>是hyper-v enlightments, 适用于Windows客户机.&lt;/p>
+&lt;p>用&lt;code>-smp&lt;/code>选项可指定CPU的拓扑关系, 这里指定一枚CPU, 8个核心, 每个核心有1个线程.&lt;/p>
+&lt;h2 id="uefi固件">UEFI固件
+&lt;/h2>&lt;p>利用OVMF提供的edk2固件, 实现UEFI启动. 一般发行版都会打包OVMF固件, 没有的话可以从网上下载.
+固件分为只读和可写两部分, 以&lt;code>pflash&lt;/code>形式添加.&lt;/p>
+&lt;h2 id="显卡">显卡
+&lt;/h2>&lt;p>Qemu给x86客机默认模拟的是一个基本的VGA设备, 足以用于Windows客机显示.
+除此之外可选的是&lt;code>virtio-vga&lt;/code>和&lt;code>qxl-vga&lt;/code>. 前者可选择OpenGL加速(基于API转发, 目前对Windows无效), 后者主要用于给SPICE远程连接.&lt;/p>
+&lt;p>它们都是兼容VGA的, 在virtio驱动iso里包含对应的驱动. 这些Windows驱动都是DoD(Display only driver)驱动, 没有Windows上的图形加速功能, 用处不大, 功能上和基本的VGA无异.&lt;/p>
+&lt;p>参看: &lt;a class="link" href="https://www.kraxel.org/blog/2019/09/display-devices-in-qemu/" target="_blank" rel="noopener"
+>https://www.kraxel.org/blog/2019/09/display-devices-in-qemu/&lt;/a> (很有价值的blog, 来自qemu开发者)&lt;/p>
+&lt;p>(如果要求图形性能, 还是需要GPU直通或GPU虚拟化, 目前Qemu中没有虚拟显卡能给Windows客机提供较好的图形加速.
+不过, 我们的目的仅是一个Windows开发机, 普通的VGA显示已足够.)&lt;/p>
+&lt;h2 id="声音">声音
+&lt;/h2>&lt;p>主机Backend部分上面选择了pipewire. 此外也可以用pulseaudio等. &lt;code>-device ich9-intel-hda -device hda-output,audiodev=snd0&lt;/code>添加了两个客机设备, 分别是audio controller和audio codec, 和前面的backend id对应.&lt;/p>
+&lt;h2 id="usb-输入">USB, 输入
+&lt;/h2>&lt;p>一些芯片组(包括q35)具有自带的USB支持, 可用&lt;code>-usb&lt;/code>开启.
+但这里我们选择了&lt;code>qemu-xhci&lt;/code>, qemu实现的一个通用的USB 3.0总线设备.&lt;/p>
+&lt;p>鼠标输入采用&lt;code>usb-tablet&lt;/code>.
+tablet设备的用处类似于触摸屏, 即Qemu无需grab input, 鼠标划过Qemu显示窗口时, 就自动输入到客机桌面中.&lt;/p>
+&lt;p>键盘方面, Qemu的x86 system emulator会默认模拟, 不需要手动添加.&lt;/p>
+&lt;h2 id="存储">存储
+&lt;/h2>&lt;p>直接使用一块virtio-scsi硬盘: &lt;code>-drive file=disk0.qcow2,if=virtio,discard=unmap&lt;/code>&lt;/p>
+&lt;p>&lt;code>if=virtio&lt;/code>在较早版本的Qemu上应该是&lt;code>virtio-blk&lt;/code>驱动.
+新版本的Qemu里则默认是&lt;code>virtio-scsi&lt;/code>总线上的scsi硬盘, 相当于:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-fallback" data-lang="fallback">&lt;span class="line">&lt;span class="cl">-drive if=none,id=hd1,format=qcow2,file=disk0.qcow2,discard=unmap
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-device scsi-hd,drive=hd1
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>qcow2硬盘镜像可用&lt;code>qemu-img&lt;/code>自行创建.&lt;/p>
+&lt;h3 id="trim">TRIM
+&lt;/h3>&lt;p>&lt;code>virtio-scsi&lt;/code>以及&lt;code>virtio-blk&lt;/code>存储设备均支持TRIM指令(即scsi标准中的unmap), 可用&lt;code>discard=unmap&lt;/code>开启.
+通过这种方式, 客机能直接告知主机, 存储中的哪些部分已经不再使用, 可以释放.
+在这之前, 常见的老办法是在客机内写入一个全部为0的大文件, 直到把硬盘填满, 再把这个文件删除,
+此时硬盘上的空闲空间应该全部是0, 随后将主机上的镜像文件转为稀疏文件.&lt;/p>
+&lt;p>对于不同的主机存储backend, 收到来自客机的TRIM指令后的处理方式也不同.
+对于qcow2和raw镜像文件, Qemu的处理方式是给文件中被trim的空闲部分punch hole, 使之成为稀疏文件, 从而减少镜像文件的实际硬盘占用.
+这一点可用&lt;code>ls -lhs&lt;/code>或&lt;code>du disk0.qcow2 ; du --apparent-size disk0.qcow2&lt;/code>来验证.&lt;/p>
+&lt;p>Windows客机在删除文件时会自动trim.
+也可以使用自带的硬盘优化工具给硬盘手动trim, 其中虚拟硬盘会被显示为&amp;quot;Thin provisioned drive&amp;quot;.&lt;/p>
+&lt;p>[截图]&lt;/p>
+&lt;h3 id="安装盘">安装盘
+&lt;/h3>&lt;p>安装时, 我们需要以cdrom形式添加windows的安装iso, 以及包含virtio windows驱动的iso.
+安装过程中, 需要先加载virtio存储驱动, 才能看到硬盘并继续安装.&lt;/p>
+&lt;h2 id="网络">网络
+&lt;/h2>&lt;p>如果在意网络性能, 最好是使用一个由主机上的一个虚拟interface back的tap设备.
+简便起见, 这里使用了qemu自带的user-mode networking, 作为主机backend.
+客机设备则是virtio网卡, 需要安装对应驱动.&lt;/p>
+&lt;p>user-mode networking自带了端口转发功能, 两个方向均可. 上面的配置是把客机发向虚拟内网中主机(网关)&lt;code>1080&lt;/code>端口的tcp包转发到本机的&lt;code>127.0.0.1:1080&lt;/code>处.&lt;/p>
+&lt;h2 id="virtiofs文件共享">virtiofs文件共享
+&lt;/h2>&lt;p>目前Qemu上性能最好的共享文件方案就是virtiofs, 它是基于共享内存实现, 性能远高于9pfs或者其它基于网络层的方案.&lt;/p>
+&lt;p>客机部分: Windows上的virtiofs文件系统驱动是用WinFsp实现, 这个相当于Windows上的FUSE, 需要在客机提前安装好.
+此外, 需要安装好virtiofs的客机驱动和服务. 这部分可以直接安装virtio驱动iso中的guest工具包.
+安装后在services.msc中找到并开启virtiofs服务即可.&lt;/p>
+&lt;p>主机部分: 运行virtiofsd, 指定通讯用socket路径和共享文件路径即可;
+在对应的Qemu参数中, 配置好共享内存和socket, 并添加&lt;code>vhost-user-fs-pci&lt;/code>设备.&lt;/p>
+&lt;h2 id="其它">其它
+&lt;/h2>&lt;ul>
+&lt;li>&lt;code>-rtc base=localtime&lt;/code>: 由于Windows默认认为硬件时钟是本地时区. 因此将模拟的硬件时钟设为本地时区. (假设客户机的时区和本机相同)&lt;/li>
+&lt;li>&lt;code>-device virtio-balloon&lt;/code>: ballon设备帮助qemu主进程释放客户机空闲的内存.&lt;/li>
+&lt;/ul>
+&lt;h1 id="结果">结果
+&lt;/h1>&lt;p>[截图]&lt;/p></description></item><item><title>Emulating ARM on QEMU, with UEFI</title><link>https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/</link><pubDate>Wed, 28 Jul 2021 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/</guid><description>&lt;p>Emulating ARM machines on QEMU hasn&amp;rsquo;t been straight-forward due to lack of a
+standardized way to configure the bootloader across different ARM boards. One
+had to extract the kernel image, and specify the boot options on the command
+line (&lt;code>-kernel&lt;/code>, &lt;code>-initrd&lt;/code>), so QEMU knows what to do with its machine-specific
+boot code.&lt;/p>
+&lt;p>We can make things easier with the help of UEFI (namely EDK2, with ARM support), so
+installing and booting Linux just works like on a x86 PC target.&lt;/p>
+&lt;h1 id="prerequisites">Prerequisites
+&lt;/h1>&lt;ul>
+&lt;li>QEMU system emulator for ARM.&lt;/li>
+&lt;li>EDK2 binaries for ARM. They can be extracted from the debian package
+&lt;code>qemu-efi-arm&lt;/code> or &lt;code>qemu-efi-aarch64&lt;/code>, depending on your target arch.&lt;/li>
+&lt;li>Official Debian installer iso for ARM.&lt;/li>
+&lt;/ul>
+&lt;h1 id="booting-the-installer">Booting the installer
+&lt;/h1>&lt;blockquote>
+&lt;p>&lt;strong>NOTE:&lt;/strong> This example is for arm32&lt;/p>&lt;/blockquote>
+&lt;p>First of all, create a new disk image via &lt;code>qemu-img&lt;/code>. Copy EDK2 FW binaries
+(&lt;code>AAVMF32_CODE.fd&lt;/code> and &lt;code>AAVMF32_VARS.fd&lt;/code>, the latter is for hosting volatile
+variables) and the installer image to the same directory.&lt;/p>
+&lt;p>We will be emulating the &lt;code>virt&lt;/code> board, which has support for virtio devices.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-fallback" data-lang="fallback">&lt;span class="line">&lt;span class="cl">qemu-system-arm -M virt -m 512M -cpu cortex-a15 -smp 4 \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-device qemu-xhci -device usb-kbd \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-device usb-storage,drive=install -blockdev file,filename=debian-testing-armhf-DVD-1.iso,node-name=install \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-blockdev qcow2,node-name=root,file.driver=file,file.filename=disk0.qcow2 -device virtio-blk-device,drive=root \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-nic user,model=virtio \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-pflash ./AAVMF32_CODE.fd -pflash ./AAVMF32_VARS.fd \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-device ramfb
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;ul>
+&lt;li>The system is given 512M of RAM and 4 cpus
+(depending on your QEMU version, this could mean either 4 sockets or 4 cores),
+the CPU capability is set to &lt;code>cortex-a15&lt;/code>.&lt;/li>
+&lt;li>&lt;code>-device qemu-xhci -device usb-kbd&lt;/code> attaches a low-overhead USB XHCI bus, and
+a USB keyboard. You could add a mouse if needed.
+Alternatively, on-board USB support that comes with &lt;code>virt&lt;/code> is available by passing &lt;code>-usb&lt;/code>.&lt;/li>
+&lt;li>Next two lines attach the installer iso as a USB storage device, and the
+rootfs disk as a virtio block device.&lt;/li>
+&lt;li>&lt;code>-nic user,model=virtio&lt;/code> enables basic user-mode networking, backed by the
+virtio NIC.&lt;/li>
+&lt;li>&lt;code>-device ramfb&lt;/code> adds a simple display device, which is just a frambuffer in
+guest memory. QEMU ARM system emulator does not emulate a display device by
+default. The standard &lt;code>std&lt;/code> VGA won&amp;rsquo;t work since the installer environment
+lacks required DRM kmods.&lt;/li>
+&lt;/ul>
+&lt;p>The graphics &amp;amp; input part can be left-out (with &lt;code>-nographic&lt;/code>),
+in which case the installer will be presented on the serial console.&lt;/p>
+&lt;p>The guest will now boot into the installer iso. Simply
+follow the installation instructions, the grub-efi bootloader will be installed to the EFI firmware automatically.&lt;/p>
+&lt;h1 id="booting-the-installed-system">Booting the installed system
+&lt;/h1>&lt;p>No additional configuration is required.
+Don&amp;rsquo;t forget to attach the UEFI firmware via &lt;code>-pflash&lt;/code>.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-text" data-lang="text">&lt;span class="line">&lt;span class="cl">qemu-system-arm -M virt -m 512M -cpu cortex-a15 -smp 4 \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-device qemu-xhci -device usb-kbd \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-blockdev qcow2,node-name=root,file.driver=file,file.filename=disk0.qcow2 -device virtio-blk-device,drive=root \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-nic user,model=virtio,hostfwd=tcp::2345-:22 \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-pflash ./AAVMF32_CODE.fd -pflash ./AAVMF32_VARS.fd \
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-device VGA
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-virtfs local,path=/host/path/to/shared/,id=share,mount_tag=share,security_model=mapped
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>There are a few additional configurations:&lt;/p>
+&lt;ul>
+&lt;li>Host porting forwarding is enabled for host port 2345, to guest port 22.
+This way we are able to ssh directly into the guest system.&lt;/li>
+&lt;li>Attach a shared folder to the guest, backed by &lt;code>9pfs&lt;/code>.
+The folder can be mounted in the guest via &lt;code>mount -t 9p -o trans=virtio share /path/to/mount&lt;/code>&lt;/li>
+&lt;/ul>
+&lt;p>&lt;img src="https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/qemu-arm.png"
+width="1154"
+height="954"
+srcset="https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/qemu-arm_hu_5ac4c89722fde978.png 480w, https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/qemu-arm_hu_345da8b712379c81.png 1024w"
+loading="lazy"
+alt="booted system"
+class="gallery-image"
+data-flex-grow="120"
+data-flex-basis="290px"
+>&lt;/p>
+&lt;p>Voilà! Your new virtual ARM system is ready to go!&lt;/p></description></item></channel></rss>
