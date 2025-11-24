@@ -61,7 +61,24 @@ int foo_some_function(FooCtx*);
 很遗憾, 实际上这个方法仍然是违反strict aliasing rule的, 因为`buf`的实际类型是`char`数组, 且永远不会改变, 把一个`FooCtx`给`memcpy`进去也没用.
 `foo_init_storage`必定会把`buf`这片区域当做`FooCtx`来访问, 就算传`void*`也没区别, 因此这实际是UB.
 
+这里quote一段[cppreference](https://en.cppreference.com/w/c/language/object.html)上的内容:
+>Every object has an effective type, which determines which lvalue accesses are valid and which violate the strict aliasing rules.
+>
+>**If the object was created by a declaration, the declared type of that object is the object's effective type**.
+>
+>If the object was created by an allocation function (including realloc), it has no declared type. Such object acquires an effective type as follows:
+>
+>* The first write to that object through an lvalue that has a type other than character type, at which time the type of that lvalue becomes this object's effective type for that write and all subsequent reads.
+>* memcpy or memmove copy another object into that object, or copy another object into that object as an array of character type, at which time the effective type of the source object (if it had one) becomes the effective type of this object for that write and all subsequent reads.
+>* Any other access to the object with no declared type, the effective type is the type of the lvalue used for the access.
+
+也就是说, 用`memcpy`设置effective type仅可用于malloc/realloc出来的buffer, 这样的buffer刚分配出来时没有effective type(在C++当中, 这叫做implicit lifetime). 如果是一块事先声明的`unsigned char buf[]`, 那么它的effective type就一直是`unsigned char[]`, 并不会被`memcpy`改变. `memcpy`本身是合法的, 但将`buf`之后作为`FooCtx`访问则是UB.
+
 (注意, 用`char*`访问`FooCtx`可以, 但反过来不行)
+
+当然, 这可能有些过于语言律师了, 实际上这么做一般也不会出问题.
+
+事实上, C2Y中有一个[Accessing byte arrays](https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3254.pdf)的提案, 就是专门为了解决这个问题, 把这种`char`数组访问作为strict aliasing的一个特殊例外. 此外, 提案作者对主流编译器的相关行为做了调查, 发现没有哪个编译器利用目前的这个UB做了优化.
 
 # Inline PIMPL
 A.K.A. fast PIMPL, 也就是不需要经过动态内存分配的PIMPL.
