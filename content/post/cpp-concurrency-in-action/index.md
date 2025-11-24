@@ -2,7 +2,7 @@
 title: C++ Concurrency in Action
 description: Book by Anthony Williams
 date:     2023-06-09
-lastmode: 2023-06-09
+lastmod: 2023-06-09
 categories:
     - Books
 tags:
