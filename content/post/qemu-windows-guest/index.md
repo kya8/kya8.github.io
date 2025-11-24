@@ -1,5 +1,5 @@
 ---
-title: Qemu windows guest best practices
+title: Qemu Windows客户机最佳实践 
 date: 2024-03-12
 lastmod: 2025-07-06
 draft: false

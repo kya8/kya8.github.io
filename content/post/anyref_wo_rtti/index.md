@@ -1,8 +1,9 @@
 ---
-title: any_ref w/o RTTI
+title: any_ref without RTTI
 description: ...以及不同平台动态链接实现的影响
 date: 2025-01-09
 draft: false
+lastmod: 2025-11-24
 
 categories:
 tags:
@@ -33,7 +34,7 @@ have exactly the same definition in every case (6.2). ...... **An
 inline function or variable with external linkage shall have the same address in all translation units.**  
 -- _C++17 specification n4713, §10.1.6_
 
-例如, 我们可以使用一个`inline`的变量模版, 这个模版若用相同的地址单态化, 即使是在不同的编译单元(TU)内, 产生的变量也会具有相同的指针地址.
+例如, 我们可以使用一个`inline`的变量模版, 这个模版若用相同的模板类型实参单态化, 即使是在不同的编译单元(TU)内, 产生的变量也会具有相同的指针地址.
 反之, 如果用不同的类型单态化, 变量地址也会不同. 利用这一点就能实现`any_ref`cast时的类型验证.
 
 这里直接给出一个简单的实现:
@@ -199,7 +200,7 @@ target_link_libraries(anyref mylib)
 ## 动态链接
 这里我们先给出结果:
 
-(TODO: 等我有空了把macOS和MinGW补上)
+(TODO: 等我有空了把~~macOS~~和MinGW补上)
 
 ### Windows 11, MSVC
 结果为失败. 通过debugger或手动print能看出, `inline`变量`any_ref_helper`在主程序和动态库中的地址确实不同.
@@ -226,6 +227,11 @@ target_link_libraries(anyref mylib)
 ### Linux, 但`-fvisibility=hidden`
 * Clang 结果均为失败.
 * 所有 GCC 结果仍为成功.
+
+### macOS 26, Apple clang 17
+* `-fvisibility=hidden`则失败, 否则成功. 如图
+
+    ![macOS, Clang](macos-dynlib.png)
 
 # 结果解读
 
@@ -306,6 +312,25 @@ Windows的PE可执行格式中, COMDAT用于合并多个编译单元内的同一
 如果我们需要确保唯一性的`inline`变量只是一个普通变量, 并不是一个会以任意类型单态化的模板, 那么解决方法就是仅在一个DLL导出这个变量(声明为`__declspec(dllexport)`), 其它地方, 包括调用这个DLL的程序或其它DLL, 均声明为`__declspec(dllimport)`.
 
 但是, `AnyRef`中使用的`inline`变量模板无法提供所有可能类型的单态化, 并不适用这个做法.
+
+## macOS
+macOS上的结果和Linux+Clang是类似的. `nm`的结果:
+
+```
+# 默认
+$ nm -C libmylib.dylib
+0000000000008000 D detail::any_ref_helper<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const>
+$ nm -C anyref
+0000000100008000 D detail::any_ref_helper<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const>
+
+# -fvisibility=hidden
+$ nm -C libmylib.dylib
+0000000000008000 d detail::any_ref_helper<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const>
+$ nm -C anyref
+0000000100008000 d detail::any_ref_helper<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const>
+```
+
+`D`或`d`表示可执行文件data section中的符号, 区别是前者为外部可见的符号, 后者是仅在当前对象文件内. 实际上, 多个重复的`D`定义的行为类似于weak symbol, 因此保证了`any_ref_helper`地址的一致性. 对于`d`, 就没有这个保证了.
 
 ## 结论
 简而言之,
