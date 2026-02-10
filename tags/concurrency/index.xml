@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Concurrency on Kya's Blog</title><link>https://kya8.github.io/tags/concurrency/</link><description>Recent content in Concurrency on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Fri, 09 Jun 2023 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/concurrency/index.xml" rel="self" type="application/rss+xml"/><item><title>C++ Concurrency in Action</title><link>https://kya8.github.io/p/c-concurrency-in-action/</link><pubDate>Fri, 09 Jun 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/c-concurrency-in-action/</guid><description>&lt;h1 id="related-resources"&gt;Related resources
+&lt;/h1&gt;&lt;p&gt;Talks:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="link" href="https://www.youtube.com/watch?v=A8eCGOqgvH4" target="_blank" rel="noopener"
+&gt;Herb Sutter - Atomic Weapons&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://www.youtube.com/watch?v=c1gO9aB9nbs" target="_blank" rel="noopener"
+&gt;Herb Sutter - Lock-Free Programming (or, Juggling Razor Blades)&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;</description></item></channel></rss>
