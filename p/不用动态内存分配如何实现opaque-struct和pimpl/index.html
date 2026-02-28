@@ -1,0 +1,157 @@
+<!doctype html><html lang=en-us dir=ltr><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><meta name=description content="C语言编程中一个常见的practice是将某个struct的definition隐藏, 仅通过指针使用它, 而具体的定义放在一个单独的TU之中, 叫opaque struct. 这种做法的目的一般是为了隐藏struct中的成员, 作为加速编译的隔离手段, 并且还能保证ABI稳定性(因为API只有指针).\n在C++中, 当然也可以用C风格的opaque struct, C++并不阻止你这么做, 但通常的做法是用PIMPL, 方法也是类似的.\n例如, 我们有一个C风格的库libfoo:\n1 2 3 4 5 6 7 8 9 10 // foo.h typedef struct FooCtx FooCtx; FooCtx* foo_create_context(); void foo_destroy_context(FooCtx*); int foo_some_function(FooCtx*); // foo.c // 包含FooCtx和上述函数的定义 使用者只需要拿着这个FooCtx*的handle, 不需要关心它内部是什么.\n避免动态内存分配 常见的opaque struct或者PIML做法, 免不了动态内存分配, 因为FooCtx的size在头文件里未知. 有没有什么办法可以绕过这个要求? 作为C/C++程序员, 总是对动态内存分配比较敏感. 有些场景, 比如某些嵌入式平台还没有一般的动态分配可用.\n答案是可以, 其实就是把FooCtx放在栈上, 用一段栈上的buffer提供存储空间.\n1 2 3 4 5 6 7 8 9 10 11 #define FOO_CTX_SIZE /*...*/ #define FOO_CTX_ALIGNMENT /*...*/ typedef struct FooCtxStorage { alignas(FOO_CTX_ALIGNMENT) unsigned char buf[FOO_CTX_SIZE]; } FooCtxStorage; FooCtx* foo_init_storage(FooCtxStorage* buf); void foo_finish(FooCtx* buf); // cleans up additional resources held by FooCtx, no need to free memory. int foo_some_function(FooCtx*); 显然, FooCtxStorage::buf需要能够装下FooCtx, 并满足内存对齐要求. 这里用了alignas, 如果没有C11, 也可以把FooCtxStorage换成一个union, 加入一个member, 用于确保buf的对齐.\n"><title>不用动态内存分配如何实现opaque struct和PIMPL?</title><link rel=canonical href=https://kya8.github.io/p/%E4%B8%8D%E7%94%A8%E5%8A%A8%E6%80%81%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0opaque-struct%E5%92%8Cpimpl/><link rel=stylesheet href=/scss/style.min.8659d82dbe8d0fe183ef22445ed42765c7d1d996ae5b4a02725eda69426286da.css><meta property='og:title' content="不用动态内存分配如何实现opaque struct和PIMPL?"><meta property='og:description' content="C语言编程中一个常见的practice是将某个struct的definition隐藏, 仅通过指针使用它, 而具体的定义放在一个单独的TU之中, 叫opaque struct. 这种做法的目的一般是为了隐藏struct中的成员, 作为加速编译的隔离手段, 并且还能保证ABI稳定性(因为API只有指针).\n在C++中, 当然也可以用C风格的opaque struct, C++并不阻止你这么做, 但通常的做法是用PIMPL, 方法也是类似的.\n例如, 我们有一个C风格的库libfoo:\n1 2 3 4 5 6 7 8 9 10 // foo.h typedef struct FooCtx FooCtx; FooCtx* foo_create_context(); void foo_destroy_context(FooCtx*); int foo_some_function(FooCtx*); // foo.c // 包含FooCtx和上述函数的定义 使用者只需要拿着这个FooCtx*的handle, 不需要关心它内部是什么.\n避免动态内存分配 常见的opaque struct或者PIML做法, 免不了动态内存分配, 因为FooCtx的size在头文件里未知. 有没有什么办法可以绕过这个要求? 作为C/C++程序员, 总是对动态内存分配比较敏感. 有些场景, 比如某些嵌入式平台还没有一般的动态分配可用.\n答案是可以, 其实就是把FooCtx放在栈上, 用一段栈上的buffer提供存储空间.\n1 2 3 4 5 6 7 8 9 10 11 #define FOO_CTX_SIZE /*...*/ #define FOO_CTX_ALIGNMENT /*...*/ typedef struct FooCtxStorage { alignas(FOO_CTX_ALIGNMENT) unsigned char buf[FOO_CTX_SIZE]; } FooCtxStorage; FooCtx* foo_init_storage(FooCtxStorage* buf); void foo_finish(FooCtx* buf); // cleans up additional resources held by FooCtx, no need to free memory. int foo_some_function(FooCtx*); 显然, FooCtxStorage::buf需要能够装下FooCtx, 并满足内存对齐要求. 这里用了alignas, 如果没有C11, 也可以把FooCtxStorage换成一个union, 加入一个member, 用于确保buf的对齐.\n"><meta property='og:url' content='https://kya8.github.io/p/%E4%B8%8D%E7%94%A8%E5%8A%A8%E6%80%81%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0opaque-struct%E5%92%8Cpimpl/'><meta property='og:site_name' content="Kya's Blog"><meta property='og:type' content='article'><meta property='article:section' content='Post'><meta property='article:tag' content='c++'><meta property='article:tag' content='c'><meta property='article:published_time' content='2024-12-06T00:00:00+00:00'><meta property='article:modified_time' content='2024-12-06T00:00:00+00:00'><meta name=twitter:title content="不用动态内存分配如何实现opaque struct和PIMPL?"><meta name=twitter:description content="C语言编程中一个常见的practice是将某个struct的definition隐藏, 仅通过指针使用它, 而具体的定义放在一个单独的TU之中, 叫opaque struct. 这种做法的目的一般是为了隐藏struct中的成员, 作为加速编译的隔离手段, 并且还能保证ABI稳定性(因为API只有指针).\n在C++中, 当然也可以用C风格的opaque struct, C++并不阻止你这么做, 但通常的做法是用PIMPL, 方法也是类似的.\n例如, 我们有一个C风格的库libfoo:\n1 2 3 4 5 6 7 8 9 10 // foo.h typedef struct FooCtx FooCtx; FooCtx* foo_create_context(); void foo_destroy_context(FooCtx*); int foo_some_function(FooCtx*); // foo.c // 包含FooCtx和上述函数的定义 使用者只需要拿着这个FooCtx*的handle, 不需要关心它内部是什么.\n避免动态内存分配 常见的opaque struct或者PIML做法, 免不了动态内存分配, 因为FooCtx的size在头文件里未知. 有没有什么办法可以绕过这个要求? 作为C/C++程序员, 总是对动态内存分配比较敏感. 有些场景, 比如某些嵌入式平台还没有一般的动态分配可用.\n答案是可以, 其实就是把FooCtx放在栈上, 用一段栈上的buffer提供存储空间.\n1 2 3 4 5 6 7 8 9 10 11 #define FOO_CTX_SIZE /*...*/ #define FOO_CTX_ALIGNMENT /*...*/ typedef struct FooCtxStorage { alignas(FOO_CTX_ALIGNMENT) unsigned char buf[FOO_CTX_SIZE]; } FooCtxStorage; FooCtx* foo_init_storage(FooCtxStorage* buf); void foo_finish(FooCtx* buf); // cleans up additional resources held by FooCtx, no need to free memory. int foo_some_function(FooCtx*); 显然, FooCtxStorage::buf需要能够装下FooCtx, 并满足内存对齐要求. 这里用了alignas, 如果没有C11, 也可以把FooCtxStorage换成一个union, 加入一个member, 用于确保buf的对齐.\n"></head><body class=article-page><script>(function(){const e="StackColorScheme";localStorage.getItem(e)||localStorage.setItem(e,"auto")})()</script><script>(function(){const t="StackColorScheme",e=localStorage.getItem(t),n=window.matchMedia("(prefers-color-scheme: dark)").matches===!0;e=="dark"||e==="auto"&&n?document.documentElement.dataset.scheme="dark":document.documentElement.dataset.scheme="light"})()</script><div class="container main-container flex on-phone--column extended"><aside class="sidebar left-sidebar sticky"><button class="hamburger hamburger--spin" type=button id=toggle-menu aria-label="Toggle Menu">
+<span class=hamburger-box><span class=hamburger-inner></span></span></button><header><div class=site-meta><h1 class=site-name><a href=/>Kya's Blog</a></h1><h2 class=site-description></h2></div></header><ol class=menu-social><li><a href=https://github.com/kya8 target=_blank title=GitHub rel=me><svg class="icon icon-tabler icon-tabler-brand-github" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6.0 00-1.3-3.2 4.2 4.2.0 00-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3.0 00-6.2.0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2.0 00-.1 3.2A4.6 4.6.0 004 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg></a></li></ol><ol class=menu id=main-menu><li><a href=/><svg class="icon icon-tabler icon-tabler-home" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><polyline points="5 12 3 12 12 3 21 12 19 12"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/><path d="M9 21v-6a2 2 0 012-2h2a2 2 0 012 2v6"/></svg>
+<span>Home</span></a></li><li><a href=/archives/><svg class="icon icon-tabler icon-tabler-archive" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><rect x="3" y="4" width="18" height="4" rx="2"/><path d="M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+<span>Archives</span></a></li><li><a href=/search/><svg class="icon icon-tabler icon-tabler-search" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15" y2="15"/></svg>
+<span>Search</span></a></li><li class=menu-bottom-section><ol class=menu><li id=dark-mode-toggle><svg class="icon icon-tabler icon-tabler-toggle-left" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="8" cy="12" r="2"/><rect x="2" y="6" width="20" height="12" rx="6"/></svg>
+<svg class="icon icon-tabler icon-tabler-toggle-right" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="16" cy="12" r="2"/><rect x="2" y="6" width="20" height="12" rx="6"/></svg>
+<span>Dark Mode</span></li></ol></li></ol></aside><aside class="sidebar right-sidebar sticky"><section class="widget archives"><div class=widget-icon><svg class="icon icon-tabler icon-tabler-hash" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><line x1="5" y1="9" x2="19" y2="9"/><line x1="5" y1="15" x2="19" y2="15"/><line x1="11" y1="4" x2="7" y2="20"/><line x1="17" y1="4" x2="13" y2="20"/></svg></div><h2 class="widget-title section-title">Table of contents</h2><div class=widget--toc><nav id=TableOfContents><ol><li><a href=#避免动态内存分配>避免动态内存分配</a><ol><li><a href=#编译期确保大小和对齐>编译期确保大小和对齐</a></li><li><a href=#strict-aliasing>Strict aliasing</a></li></ol></li><li><a href=#inline-pimpl>Inline PIMPL</a><ol><li><a href=#abi稳定性>ABI稳定性</a></li></ol></li></ol></nav></div></section></aside><main class="main full-width"><article class=main-article><header class=article-header><div class=article-details><div class=article-title-wrapper><h2 class=article-title><a href=/p/%E4%B8%8D%E7%94%A8%E5%8A%A8%E6%80%81%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0opaque-struct%E5%92%8Cpimpl/>不用动态内存分配如何实现opaque struct和PIMPL?</a></h2></div><footer class=article-time><div><svg class="icon icon-tabler icon-tabler-calendar-time" width="56" height="56" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><path d="M11.795 21H5a2 2 0 01-2-2V7a2 2 0 012-2h12a2 2 0 012 2v4"/><circle cx="18" cy="18" r="4"/><path d="M15 3v4"/><path d="M7 3v4"/><path d="M3 11h16"/><path d="M18 16.496V18l1 1"/></svg>
+<time class=article-time--published>Dec 06, 2024</time></div><div><svg class="icon icon-tabler icon-tabler-clock" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+<time class=article-time--reading>2 minute read</time></div></footer></div></header><section class=article-content><p>C语言编程中一个常见的practice是将某个struct的definition隐藏, 仅通过指针使用它, 而具体的定义放在一个单独的TU之中,
+叫opaque struct. 这种做法的目的一般是为了隐藏struct中的成员, 作为加速编译的隔离手段, 并且还能保证ABI稳定性(因为API只有指针).</p><p>在C++中, 当然也可以用C风格的opaque struct, C++并不阻止你这么做, 但通常的做法是用<strong>PIMPL</strong>, 方法也是类似的.</p><p>例如, 我们有一个C风格的库<code>libfoo</code>:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=c1>// foo.h
+</span></span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=n>FooCtx</span> <span class=n>FooCtx</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>FooCtx</span><span class=o>*</span> <span class=nf>foo_create_context</span><span class=p>();</span>
+</span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>foo_destroy_context</span><span class=p>(</span><span class=n>FooCtx</span><span class=o>*</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>foo_some_function</span><span class=p>(</span><span class=n>FooCtx</span><span class=o>*</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// foo.c
+</span></span></span><span class=line><span class=cl><span class=c1>// 包含FooCtx和上述函数的定义
+</span></span></span></code></pre></td></tr></table></div></div><p>使用者只需要拿着这个<code>FooCtx*</code>的handle, 不需要关心它内部是什么.</p><h1 id=避免动态内存分配>避免动态内存分配</h1><p>常见的opaque struct或者PIML做法, 免不了动态内存分配, 因为<code>FooCtx</code>的size在头文件里未知.
+有没有什么办法可以绕过这个要求? 作为C/C++程序员, 总是对动态内存分配比较敏感. 有些场景, 比如某些嵌入式平台还没有一般的动态分配可用.</p><p>答案是可以, 其实就是把<code>FooCtx</code>放在栈上, 用一段栈上的buffer提供存储空间.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=cp>#define FOO_CTX_SIZE </span><span class=cm>/*...*/</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#define FOO_CTX_ALIGNMENT </span><span class=cm>/*...*/</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=n>FooCtxStorage</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>alignas</span><span class=p>(</span><span class=n>FOO_CTX_ALIGNMENT</span><span class=p>)</span> <span class=kt>unsigned</span> <span class=kt>char</span> <span class=n>buf</span><span class=p>[</span><span class=n>FOO_CTX_SIZE</span><span class=p>];</span>
+</span></span><span class=line><span class=cl><span class=p>}</span> <span class=n>FooCtxStorage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>FooCtx</span><span class=o>*</span> <span class=nf>foo_init_storage</span><span class=p>(</span><span class=n>FooCtxStorage</span><span class=o>*</span> <span class=n>buf</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>foo_finish</span><span class=p>(</span><span class=n>FooCtx</span><span class=o>*</span> <span class=n>buf</span><span class=p>);</span> <span class=c1>// cleans up additional resources held by FooCtx, no need to free memory.
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>foo_some_function</span><span class=p>(</span><span class=n>FooCtx</span><span class=o>*</span><span class=p>);</span>
+</span></span></code></pre></td></tr></table></div></div><p>显然, <code>FooCtxStorage::buf</code>需要能够装下<code>FooCtx</code>, 并满足内存对齐要求.
+这里用了<code>alignas</code>, 如果没有C11, 也可以把<code>FooCtxStorage</code>换成一个union, 加入一个member, 用于确保<code>buf</code>的对齐.</p><p><code>foo_init_storage</code>用于在已有的一段缓存上创建一个<code>FooCtx</code>, 并且返回所创建对象的指针.
+其它函数只接收<code>FooCtx*</code>作为参数.
+<code>foo_finish</code>用于释放<code>FooCtx</code>可能管理的资源, 但不需要释放它本身占用的存储, 因为存储是由外部提供.</p><p>这个方法使用时需要先在栈上声明一个<code>FooCtxStorage</code>(当然实际上放在哪里都行), 然后用一个初始化函数获得创建好的<code>FooCtx*</code>, 有两个变量, 需要一致.
+而且, 如果对象被move, 还需要保持指针和storage对象同步. (当然, 可以提供专门的move/copy函数避免错误)</p><h2 id=编译期确保大小和对齐>编译期确保大小和对齐</h2><p>在对应的<code>foo.c</code>的TU里, 我们可以用一些静态assert确保<code>FOO_CTX_SIZE</code>和<code>FOO_CTX_ALIGNMENT</code>确实符合<code>FooCtx</code>的定义.</p><h2 id=strict-aliasing>Strict aliasing</h2><p>很遗憾, 实际上这个方法仍然是违反strict aliasing rule的, 因为<code>buf</code>的实际类型是<code>char</code>数组, 且永远不会改变, 把一个<code>FooCtx</code>给<code>memcpy</code>进去也没用.
+<code>foo_init_storage</code>必定会把<code>buf</code>这片区域当做<code>FooCtx</code>来访问, 就算传<code>void*</code>也没区别, 因此这实际是UB.</p><p>(注意, 用<code>char*</code>访问<code>FooCtx</code>可以, 但反过来不行)</p><h1 id=inline-pimpl>Inline PIMPL</h1><p>A.K.A. fast PIMPL, 也就是不需要经过动态内存分配的PIMPL.
+原理上和上面的方法类似, 但由于C++提供了<strong>placement new</strong>和<code>std::launder</code>, 可以非UB地实现.
+(这里假设读者已经知晓PIMPL的一般用法.)</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=c1>// foo.h
+</span></span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>Foo</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl><span class=k>public</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=n>Foo</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>    <span class=o>~</span><span class=n>Foo</span><span class=p>()</span> <span class=k>noexcept</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=c1>// 有需要的话, 声明(或delete)copy和move
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=c1>// 其它method...
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>private</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=k>struct</span> <span class=nc>Impl</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>static</span> <span class=k>constexpr</span> <span class=kt>int</span> <span class=n>impl_alignment</span> <span class=o>=</span> <span class=cm>/* write it down, or just use max_align_t if no extended alignment */</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>static</span> <span class=k>constexpr</span> <span class=kt>int</span> <span class=n>impl_size</span> <span class=o>=</span> <span class=cm>/* .. */</span>
+</span></span><span class=line><span class=cl>    <span class=k>alignas</span><span class=p>(</span><span class=n>impl_alignment</span><span class=p>)</span> <span class=kt>unsigned</span> <span class=kt>char</span> <span class=n>buf</span><span class=p>[</span><span class=n>impl_size</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=c1>//Impl* handle; //这一项可以不要, 省掉一点空间, 换成下面的函数.
+</span></span></span><span class=line><span class=cl>    <span class=n>Impl</span><span class=o>*</span> <span class=nf>get_impl</span><span class=p>()</span> <span class=k>noexcept</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// foo.cpp中的内容
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>struct</span> <span class=nc>Foo</span><span class=o>::</span><span class=n>Impl</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=c1>//...
+</span></span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>static_assert</span><span class=p>(</span><span class=n>Foo</span><span class=o>::</span><span class=n>impl_size</span> <span class=o>&gt;=</span> <span class=k>sizeof</span><span class=p>(</span><span class=n>Foo</span><span class=o>::</span><span class=n>Impl</span><span class=p>));</span>
+</span></span><span class=line><span class=cl><span class=k>static_assert</span><span class=p>(</span><span class=n>Foo</span><span class=o>::</span><span class=n>impl_alignment</span> <span class=o>&gt;=</span> <span class=k>alignof</span><span class=p>(</span><span class=n>Foo</span><span class=o>::</span><span class=n>Impl</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>Foo</span><span class=o>::</span><span class=n>Foo</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=c1>// 如果有handle, 就这时候记录它.
+</span></span></span><span class=line><span class=cl>    <span class=c1>// handle = new(buf) Impl{};
+</span></span></span><span class=line><span class=cl>    <span class=c1>// 没有的话, 直接new, 丢掉指针, 一会用std::launder找回来.
+</span></span></span><span class=line><span class=cl>    <span class=k>new</span><span class=p>(</span><span class=o>&amp;</span><span class=n>buf</span><span class=p>[</span><span class=mi>0</span><span class=p>])</span> <span class=n>Impl</span><span class=p>{};</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>Foo</span><span class=o>::</span><span class=n>Impl</span><span class=o>*</span> <span class=n>Foo</span><span class=o>::</span><span class=n>get_impl</span><span class=p>()</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>std</span><span class=o>::</span><span class=n>launder</span><span class=p>(</span><span class=k>reinterpret_cast</span><span class=o>&lt;</span><span class=n>Impl</span><span class=o>*&gt;</span><span class=p>(</span><span class=o>&amp;</span><span class=n>buf</span><span class=p>[</span><span class=mi>0</span><span class=p>]));</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>Foo</span><span class=o>::~</span><span class=n>Foo</span><span class=p>()</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>get_impl</span><span class=p>()</span><span class=o>-&gt;~</span><span class=n>Impl</span><span class=p>();</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>创建<code>Foo</code>时, 我们用placement new在静态的<code>buf</code>上创建<code>Impl</code>对象. 这样会隐式地结束原本<code>unsigned char</code>的生命周期,
+并开始<code>Impl</code>对象的生命周期.
+placement new返回的指针可以记录着, 以后就可以通过它访问<code>Impl</code>了.</p><p>但这里为了省掉这个额外的<code>Foo::handle</code>成员变量, 我们额外定义一个<code>Foo::get_impl()</code>函数, 帮我们安全地从<code>buf</code>获取<code>Impl</code>对象.
+这里需要用到<code>std::launder</code>, 否则从原本的<code>buf</code>指针直接转换得到的<code>Impl*</code>指针并不能用于安全地访问新构建的<code>Impl</code>对象.</p><p>(也就是说, 如果没有<code>std::launder</code>可用, 就需要用一个成员变量记录placement new产生的指针.)</p><p>析构函数中, 需要我们显式地调用<code>Impl</code>上的析构函数.</p><h2 id=abi稳定性>ABI稳定性</h2><p>需要注意, 这种做法也部分舍弃了普通PIMPL带来的ABI稳定性的好处, 因为<code>Foo::buf</code>的大小和对齐可能随着<code>Foo::Impl</code>变化.</p><p>一种workaround是把<code>impl_alignment</code>调整得足够大, 并且给<code>impl_size</code>预留足够的空间, 这样<code>Impl</code>增长并不总需要改变<code>buf</code>.
+源文件里有<code>static_asset</code>检查, 所以不用担心大小或对齐不够的情况.</p></section><footer class=article-footer><section class=article-tags><a href=/tags/c++/>C++</a>
+<a href=/tags/c/>C</a></section><section class=article-copyright><svg class="icon icon-tabler icon-tabler-copyright" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="12" cy="12" r="9"/><path d="M14.5 9a3.5 4 0 100 6"/></svg>
+<span>Licensed under CC BY-NC-SA 4.0</span></section></footer></article><aside class=related-content--wrapper><h2 class=section-title>Related content</h2><div class=related-content><div class="flex article-list--tile"><article><a href=/p/signed%E4%B8%8Eunsigned%E6%95%B4%E5%9E%8B/><div class=article-details><h2 class=article-title>Signed与Unsigned整型</h2></div></a></article><article><a href=/p/portable-signal-handling/><div class=article-details><h2 class=article-title>Portable Signal handling</h2></div></a></article><article><a href=/p/pointers-again/><div class=article-details><h2 class=article-title>Pointers (again)</h2></div></a></article></div></div></aside><div class=disqus-container></div><style>.disqus-container{background-color:var(--card-background);border-radius:var(--card-border-radius);box-shadow:var(--shadow-l1);padding:var(--card-padding)}</style><script>window.addEventListener("onColorSchemeChange",e=>{typeof DISQUS=="object"&&DISQUS.reset({reload:!0})})</script><footer class=site-footer><section class=copyright>&copy;
+2020 -
+2026 Kya's Blog</section><section class=powerby>Built with <a href=https://gohugo.io/ target=_blank rel=noopener>Hugo</a><br>Theme <b><a href=https://github.com/CaiJimmy/hugo-theme-stack target=_blank rel=noopener data-version=3.31.0>Stack</a></b> designed by <a href=https://jimmycai.com target=_blank rel=noopener>Jimmy</a></section></footer><div class=pswp tabindex=-1 role=dialog aria-hidden=true><div class=pswp__bg></div><div class=pswp__scroll-wrap><div class=pswp__container><div class=pswp__item></div><div class=pswp__item></div><div class=pswp__item></div></div><div class="pswp__ui pswp__ui--hidden"><div class=pswp__top-bar><div class=pswp__counter></div><button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+<button class="pswp__button pswp__button--share" title=Share></button>
+<button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+<button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button><div class=pswp__preloader><div class=pswp__preloader__icn><div class=pswp__preloader__cut><div class=pswp__preloader__donut></div></div></div></div></div><div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap"><div class=pswp__share-tooltip></div></div><button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+</button>
+<button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)"></button><div class=pswp__caption><div class=pswp__caption__center></div></div></div></div></div><script src=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js integrity="sha256-ePwmChbbvXbsO02lbM3HoHbSHTHFAeChekF1xKJdleo=" crossorigin=anonymous defer></script><script src=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js integrity="sha256-UKkzOn/w1mBxRmLLGrSeyB4e1xbrp4xylgAWb3M42pU=" crossorigin=anonymous defer></script><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.min.css crossorigin=anonymous><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.css crossorigin=anonymous></main></div><script src=https://cdn.jsdelivr.net/npm/node-vibrant@3.1.6/dist/vibrant.min.js integrity="sha256-awcR2jno4kI5X0zL8ex0vi2z+KMkF24hUW8WePSA9HM=" crossorigin=anonymous></script><script type=text/javascript src=/ts/main.1e9a3bafd846ced4c345d084b355fb8c7bae75701c338f8a1f8a82c780137826.js defer></script><script>(function(){const e=document.createElement("link");e.href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap",e.type="text/css",e.rel="stylesheet",document.head.appendChild(e)})()</script></body></html>

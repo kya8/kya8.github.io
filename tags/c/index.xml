@@ -1,0 +1,427 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>C on Kya's Blog</title><link>https://kya8.github.io/tags/c/</link><description>Recent content in C on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Fri, 06 Dec 2024 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/c/index.xml" rel="self" type="application/rss+xml"/><item><title>不用动态内存分配如何实现opaque struct和PIMPL?</title><link>https://kya8.github.io/p/%E4%B8%8D%E7%94%A8%E5%8A%A8%E6%80%81%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0opaque-struct%E5%92%8Cpimpl/</link><pubDate>Fri, 06 Dec 2024 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/%E4%B8%8D%E7%94%A8%E5%8A%A8%E6%80%81%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0opaque-struct%E5%92%8Cpimpl/</guid><description>&lt;p&gt;C语言编程中一个常见的practice是将某个struct的definition隐藏, 仅通过指针使用它, 而具体的定义放在一个单独的TU之中,
+叫opaque struct. 这种做法的目的一般是为了隐藏struct中的成员, 作为加速编译的隔离手段, 并且还能保证ABI稳定性(因为API只有指针).&lt;/p&gt;
+&lt;p&gt;在C++中, 当然也可以用C风格的opaque struct, C++并不阻止你这么做, 但通常的做法是用&lt;strong&gt;PIMPL&lt;/strong&gt;, 方法也是类似的.&lt;/p&gt;
+&lt;p&gt;例如, 我们有一个C风格的库&lt;code&gt;libfoo&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt; 1
+&lt;/span&gt;&lt;span class="lnt"&gt; 2
+&lt;/span&gt;&lt;span class="lnt"&gt; 3
+&lt;/span&gt;&lt;span class="lnt"&gt; 4
+&lt;/span&gt;&lt;span class="lnt"&gt; 5
+&lt;/span&gt;&lt;span class="lnt"&gt; 6
+&lt;/span&gt;&lt;span class="lnt"&gt; 7
+&lt;/span&gt;&lt;span class="lnt"&gt; 8
+&lt;/span&gt;&lt;span class="lnt"&gt; 9
+&lt;/span&gt;&lt;span class="lnt"&gt;10
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-c" data-lang="c"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// foo.h
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;typedef&lt;/span&gt; &lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="n"&gt;FooCtx&lt;/span&gt; &lt;span class="n"&gt;FooCtx&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;FooCtx&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="nf"&gt;foo_create_context&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;void&lt;/span&gt; &lt;span class="nf"&gt;foo_destroy_context&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;FooCtx&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="nf"&gt;foo_some_function&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;FooCtx&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// foo.c
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// 包含FooCtx和上述函数的定义
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;使用者只需要拿着这个&lt;code&gt;FooCtx*&lt;/code&gt;的handle, 不需要关心它内部是什么.&lt;/p&gt;
+&lt;h1 id="避免动态内存分配"&gt;避免动态内存分配
+&lt;/h1&gt;&lt;p&gt;常见的opaque struct或者PIML做法, 免不了动态内存分配, 因为&lt;code&gt;FooCtx&lt;/code&gt;的size在头文件里未知.
+有没有什么办法可以绕过这个要求? 作为C/C++程序员, 总是对动态内存分配比较敏感. 有些场景, 比如某些嵌入式平台还没有一般的动态分配可用.&lt;/p&gt;
+&lt;p&gt;答案是可以, 其实就是把&lt;code&gt;FooCtx&lt;/code&gt;放在栈上, 用一段栈上的buffer提供存储空间.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt; 1
+&lt;/span&gt;&lt;span class="lnt"&gt; 2
+&lt;/span&gt;&lt;span class="lnt"&gt; 3
+&lt;/span&gt;&lt;span class="lnt"&gt; 4
+&lt;/span&gt;&lt;span class="lnt"&gt; 5
+&lt;/span&gt;&lt;span class="lnt"&gt; 6
+&lt;/span&gt;&lt;span class="lnt"&gt; 7
+&lt;/span&gt;&lt;span class="lnt"&gt; 8
+&lt;/span&gt;&lt;span class="lnt"&gt; 9
+&lt;/span&gt;&lt;span class="lnt"&gt;10
+&lt;/span&gt;&lt;span class="lnt"&gt;11
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-c" data-lang="c"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="cp"&gt;#define FOO_CTX_SIZE &lt;/span&gt;&lt;span class="cm"&gt;/*...*/&lt;/span&gt;&lt;span class="cp"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="cp"&gt;#define FOO_CTX_ALIGNMENT &lt;/span&gt;&lt;span class="cm"&gt;/*...*/&lt;/span&gt;&lt;span class="cp"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;typedef&lt;/span&gt; &lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="n"&gt;FooCtxStorage&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="nf"&gt;alignas&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;FOO_CTX_ALIGNMENT&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="kt"&gt;unsigned&lt;/span&gt; &lt;span class="kt"&gt;char&lt;/span&gt; &lt;span class="n"&gt;buf&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;FOO_CTX_SIZE&lt;/span&gt;&lt;span class="p"&gt;];&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt; &lt;span class="n"&gt;FooCtxStorage&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;FooCtx&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="nf"&gt;foo_init_storage&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;FooCtxStorage&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="n"&gt;buf&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;void&lt;/span&gt; &lt;span class="nf"&gt;foo_finish&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;FooCtx&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="n"&gt;buf&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt; &lt;span class="c1"&gt;// cleans up additional resources held by FooCtx, no need to free memory.
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="nf"&gt;foo_some_function&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;FooCtx&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;显然, &lt;code&gt;FooCtxStorage::buf&lt;/code&gt;需要能够装下&lt;code&gt;FooCtx&lt;/code&gt;, 并满足内存对齐要求.
+这里用了&lt;code&gt;alignas&lt;/code&gt;, 如果没有C11, 也可以把&lt;code&gt;FooCtxStorage&lt;/code&gt;换成一个union, 加入一个member, 用于确保&lt;code&gt;buf&lt;/code&gt;的对齐.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;foo_init_storage&lt;/code&gt;用于在已有的一段缓存上创建一个&lt;code&gt;FooCtx&lt;/code&gt;, 并且返回所创建对象的指针.
+其它函数只接收&lt;code&gt;FooCtx*&lt;/code&gt;作为参数.
+&lt;code&gt;foo_finish&lt;/code&gt;用于释放&lt;code&gt;FooCtx&lt;/code&gt;可能管理的资源, 但不需要释放它本身占用的存储, 因为存储是由外部提供.&lt;/p&gt;
+&lt;p&gt;这个方法使用时需要先在栈上声明一个&lt;code&gt;FooCtxStorage&lt;/code&gt;(当然实际上放在哪里都行), 然后用一个初始化函数获得创建好的&lt;code&gt;FooCtx*&lt;/code&gt;, 有两个变量, 需要一致.
+而且, 如果对象被move, 还需要保持指针和storage对象同步. (当然, 可以提供专门的move/copy函数避免错误)&lt;/p&gt;
+&lt;h2 id="编译期确保大小和对齐"&gt;编译期确保大小和对齐
+&lt;/h2&gt;&lt;p&gt;在对应的&lt;code&gt;foo.c&lt;/code&gt;的TU里, 我们可以用一些静态assert确保&lt;code&gt;FOO_CTX_SIZE&lt;/code&gt;和&lt;code&gt;FOO_CTX_ALIGNMENT&lt;/code&gt;确实符合&lt;code&gt;FooCtx&lt;/code&gt;的定义.&lt;/p&gt;
+&lt;h2 id="strict-aliasing"&gt;Strict aliasing
+&lt;/h2&gt;&lt;p&gt;很遗憾, 实际上这个方法仍然是违反strict aliasing rule的, 因为&lt;code&gt;buf&lt;/code&gt;的实际类型是&lt;code&gt;char&lt;/code&gt;数组, 且永远不会改变, 把一个&lt;code&gt;FooCtx&lt;/code&gt;给&lt;code&gt;memcpy&lt;/code&gt;进去也没用.
+&lt;code&gt;foo_init_storage&lt;/code&gt;必定会把&lt;code&gt;buf&lt;/code&gt;这片区域当做&lt;code&gt;FooCtx&lt;/code&gt;来访问, 就算传&lt;code&gt;void*&lt;/code&gt;也没区别, 因此这实际是UB.&lt;/p&gt;
+&lt;p&gt;(注意, 用&lt;code&gt;char*&lt;/code&gt;访问&lt;code&gt;FooCtx&lt;/code&gt;可以, 但反过来不行)&lt;/p&gt;
+&lt;h1 id="inline-pimpl"&gt;Inline PIMPL
+&lt;/h1&gt;&lt;p&gt;A.K.A. fast PIMPL, 也就是不需要经过动态内存分配的PIMPL.
+原理上和上面的方法类似, 但由于C++提供了&lt;strong&gt;placement new&lt;/strong&gt;和&lt;code&gt;std::launder&lt;/code&gt;, 可以非UB地实现.
+(这里假设读者已经知晓PIMPL的一般用法.)&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt; 1
+&lt;/span&gt;&lt;span class="lnt"&gt; 2
+&lt;/span&gt;&lt;span class="lnt"&gt; 3
+&lt;/span&gt;&lt;span class="lnt"&gt; 4
+&lt;/span&gt;&lt;span class="lnt"&gt; 5
+&lt;/span&gt;&lt;span class="lnt"&gt; 6
+&lt;/span&gt;&lt;span class="lnt"&gt; 7
+&lt;/span&gt;&lt;span class="lnt"&gt; 8
+&lt;/span&gt;&lt;span class="lnt"&gt; 9
+&lt;/span&gt;&lt;span class="lnt"&gt;10
+&lt;/span&gt;&lt;span class="lnt"&gt;11
+&lt;/span&gt;&lt;span class="lnt"&gt;12
+&lt;/span&gt;&lt;span class="lnt"&gt;13
+&lt;/span&gt;&lt;span class="lnt"&gt;14
+&lt;/span&gt;&lt;span class="lnt"&gt;15
+&lt;/span&gt;&lt;span class="lnt"&gt;16
+&lt;/span&gt;&lt;span class="lnt"&gt;17
+&lt;/span&gt;&lt;span class="lnt"&gt;18
+&lt;/span&gt;&lt;span class="lnt"&gt;19
+&lt;/span&gt;&lt;span class="lnt"&gt;20
+&lt;/span&gt;&lt;span class="lnt"&gt;21
+&lt;/span&gt;&lt;span class="lnt"&gt;22
+&lt;/span&gt;&lt;span class="lnt"&gt;23
+&lt;/span&gt;&lt;span class="lnt"&gt;24
+&lt;/span&gt;&lt;span class="lnt"&gt;25
+&lt;/span&gt;&lt;span class="lnt"&gt;26
+&lt;/span&gt;&lt;span class="lnt"&gt;27
+&lt;/span&gt;&lt;span class="lnt"&gt;28
+&lt;/span&gt;&lt;span class="lnt"&gt;29
+&lt;/span&gt;&lt;span class="lnt"&gt;30
+&lt;/span&gt;&lt;span class="lnt"&gt;31
+&lt;/span&gt;&lt;span class="lnt"&gt;32
+&lt;/span&gt;&lt;span class="lnt"&gt;33
+&lt;/span&gt;&lt;span class="lnt"&gt;34
+&lt;/span&gt;&lt;span class="lnt"&gt;35
+&lt;/span&gt;&lt;span class="lnt"&gt;36
+&lt;/span&gt;&lt;span class="lnt"&gt;37
+&lt;/span&gt;&lt;span class="lnt"&gt;38
+&lt;/span&gt;&lt;span class="lnt"&gt;39
+&lt;/span&gt;&lt;span class="lnt"&gt;40
+&lt;/span&gt;&lt;span class="lnt"&gt;41
+&lt;/span&gt;&lt;span class="lnt"&gt;42
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-c++" data-lang="c++"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// foo.h
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Foo&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;public&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="o"&gt;~&lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="k"&gt;noexcept&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// 有需要的话, 声明(或delete)copy和move
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// 其它method...
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;private&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="nc"&gt;Impl&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;static&lt;/span&gt; &lt;span class="k"&gt;constexpr&lt;/span&gt; &lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="n"&gt;impl_alignment&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="cm"&gt;/* write it down, or just use max_align_t if no extended alignment */&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;static&lt;/span&gt; &lt;span class="k"&gt;constexpr&lt;/span&gt; &lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="n"&gt;impl_size&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="cm"&gt;/* .. */&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;alignas&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;impl_alignment&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="kt"&gt;unsigned&lt;/span&gt; &lt;span class="kt"&gt;char&lt;/span&gt; &lt;span class="n"&gt;buf&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;impl_size&lt;/span&gt;&lt;span class="p"&gt;];&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;//Impl* handle; //这一项可以不要, 省掉一点空间, 换成下面的函数.
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;Impl&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="nf"&gt;get_impl&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="k"&gt;noexcept&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// foo.cpp中的内容
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="nc"&gt;Foo&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Impl&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;//...
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;static_assert&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;impl_size&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;=&lt;/span&gt; &lt;span class="k"&gt;sizeof&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Impl&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;static_assert&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;impl_alignment&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;=&lt;/span&gt; &lt;span class="k"&gt;alignof&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Impl&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// 如果有handle, 就这时候记录它.
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// handle = new(buf) Impl{};
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// 没有的话, 直接new, 丢掉指针, 一会用std::launder找回来.
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;buf&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt; &lt;span class="n"&gt;Impl&lt;/span&gt;&lt;span class="p"&gt;{};&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Impl&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;get_impl&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="k"&gt;noexcept&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;launder&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;reinterpret_cast&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Impl&lt;/span&gt;&lt;span class="o"&gt;*&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;buf&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]));&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="o"&gt;::~&lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="k"&gt;noexcept&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;get_impl&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;~&lt;/span&gt;&lt;span class="n"&gt;Impl&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;创建&lt;code&gt;Foo&lt;/code&gt;时, 我们用placement new在静态的&lt;code&gt;buf&lt;/code&gt;上创建&lt;code&gt;Impl&lt;/code&gt;对象. 这样会隐式地结束原本&lt;code&gt;unsigned char&lt;/code&gt;的生命周期,
+并开始&lt;code&gt;Impl&lt;/code&gt;对象的生命周期.
+placement new返回的指针可以记录着, 以后就可以通过它访问&lt;code&gt;Impl&lt;/code&gt;了.&lt;/p&gt;
+&lt;p&gt;但这里为了省掉这个额外的&lt;code&gt;Foo::handle&lt;/code&gt;成员变量, 我们额外定义一个&lt;code&gt;Foo::get_impl()&lt;/code&gt;函数, 帮我们安全地从&lt;code&gt;buf&lt;/code&gt;获取&lt;code&gt;Impl&lt;/code&gt;对象.
+这里需要用到&lt;code&gt;std::launder&lt;/code&gt;, 否则从原本的&lt;code&gt;buf&lt;/code&gt;指针直接转换得到的&lt;code&gt;Impl*&lt;/code&gt;指针并不能用于安全地访问新构建的&lt;code&gt;Impl&lt;/code&gt;对象.&lt;/p&gt;
+&lt;p&gt;(也就是说, 如果没有&lt;code&gt;std::launder&lt;/code&gt;可用, 就需要用一个成员变量记录placement new产生的指针.)&lt;/p&gt;
+&lt;p&gt;析构函数中, 需要我们显式地调用&lt;code&gt;Impl&lt;/code&gt;上的析构函数.&lt;/p&gt;
+&lt;h2 id="abi稳定性"&gt;ABI稳定性
+&lt;/h2&gt;&lt;p&gt;需要注意, 这种做法也部分舍弃了普通PIMPL带来的ABI稳定性的好处, 因为&lt;code&gt;Foo::buf&lt;/code&gt;的大小和对齐可能随着&lt;code&gt;Foo::Impl&lt;/code&gt;变化.&lt;/p&gt;
+&lt;p&gt;一种workaround是把&lt;code&gt;impl_alignment&lt;/code&gt;调整得足够大, 并且给&lt;code&gt;impl_size&lt;/code&gt;预留足够的空间, 这样&lt;code&gt;Impl&lt;/code&gt;增长并不总需要改变&lt;code&gt;buf&lt;/code&gt;.
+源文件里有&lt;code&gt;static_asset&lt;/code&gt;检查, 所以不用担心大小或对齐不够的情况.&lt;/p&gt;</description></item><item><title>Signed与Unsigned整型</title><link>https://kya8.github.io/p/signed%E4%B8%8Eunsigned%E6%95%B4%E5%9E%8B/</link><pubDate>Fri, 02 Aug 2024 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/signed%E4%B8%8Eunsigned%E6%95%B4%E5%9E%8B/</guid><description>&lt;h1 id="signed-or-unsigned"&gt;Signed or unsigned?
+&lt;/h1&gt;&lt;p&gt;在C与C++编程中的一个经典又经常被误解的问题是, 应当使用signed还是unsigned整数类型? 这个问题很早就有标准答案:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;C++核心规范: &lt;a class="link" href="https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#arithmetic" target="_blank" rel="noopener"
+&gt;Arithmetic - ES.100 - ES.107&lt;/a&gt;
+&lt;blockquote&gt;
+&lt;p&gt;You should not use the unsigned integer types such as &lt;code&gt;uint32_t&lt;/code&gt;, unless there is a valid reason such as representing a bit pattern rather than a number, or you need defined overflow modulo $2^N$. &lt;strong&gt;In particular, do not use unsigned types to say a number will never be negative. Instead, use assertions for this&lt;/strong&gt;.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1428r0.pdf" target="_blank" rel="noopener"
+&gt;Subscripts and sizes should be signed - Bjarne Stroustrup&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;即: 只要是有&lt;strong&gt;算数意义&lt;/strong&gt;的数字, 除非一些例外情况, 都应当使用signed整型. 算数意义是指, 这个数字如果被用于加减乘除等数学运算或者比较大小, 是有意义的.&lt;/p&gt;
+&lt;h1 id="理由和例子"&gt;理由和例子
+&lt;/h1&gt;&lt;h2 id="非负逻辑"&gt;非负逻辑
+&lt;/h2&gt;&lt;p&gt;&lt;strong&gt;尤其是, 不要用unsigned整型来表示一个数字逻辑上不能是负数.&lt;/strong&gt; 这可能是初学者最常见的错误. 这种情况应该在设计时用contract/pre-condition/post-condition来表示, 并在实现代码内用assert来检查.&lt;/p&gt;
+&lt;p&gt;例如, 一个函数的参数需要接收一个带有算数意义的整型, 且逻辑上不能为负数. 如果使用Unsigned整型, 调用者传入负数, 那么实际得到的实参也只会被wrap成一个&lt;strong&gt;无有效意义的&lt;/strong&gt;正数,
+此时函数内甚至无法判断调用者是不小心传入了负数, 还是真的mean to传入这个被wrap的正数. 并且这个wrap过程是well-defined, 并不能被ubsan之类的工具抓到.&lt;/p&gt;
+&lt;p&gt;关于这一条, 最常见的例子就是数组的下标, offset, 以及数组大小. 但在C与C++标准库, 以及其它的OS原生API中, 基本都是用&lt;code&gt;size_t&lt;/code&gt;来表示.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;POSIX规定了&lt;code&gt;ssize_t&lt;/code&gt;, 但这个类型仅仅是用来保证能够返回表示错误的一个sentinel值, 它保证能表示的负数只有-1. (当然, 实际上它一般就是&lt;code&gt;size_t&lt;/code&gt;的signed版本, 即&lt;code&gt;std::make_signed_t&amp;lt;size_t&amp;gt;&lt;/code&gt;).&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;C++标准库中的index与size类型为&lt;code&gt;size_t&lt;/code&gt;也可以归为历史遗留问题. 对于自己的代码, 建议使用&lt;code&gt;std::ptrdiff_t&lt;/code&gt;或者&lt;code&gt;gsl::index&lt;/code&gt;.&lt;/p&gt;
+&lt;h2 id="混用signed与unsigned"&gt;混用signed与unsigned
+&lt;/h2&gt;&lt;p&gt;由于C与C++中关于算术操作的类型转换规则, 在算数操作中混用signed和unsigned整型可能会导致一些不直观的后果,
+例如最简单的&lt;code&gt;unsigned(1) &amp;lt; int(-1)&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;至于为什么不用unsigned arithmetics, 理由是unsigned整形的算数规则并不直观(如wrap-around), 容易silently导致错误, 难以发现. 并且缺少负数的算术操作也不方便. 如上一点所说, 这类silent的错误经常无法分辨, 对于溢出类错误(严格说, unsigned整型不存在overflow, 超出范围只有well-defined的wrap-around)尽管不会UB, 但也没有任何帮助, 只会让程序带着错误的数据silently继续运行, 引发不可预测的后果. UB至少还可以用一些工具抓到.&lt;/p&gt;
+&lt;h2 id="优化"&gt;优化
+&lt;/h2&gt;&lt;p&gt;signed整形的overflow是UB, 这一点使得编译器能更好的优化, 例如一些index循环. 关于这一点, 引用Zig的一段介绍:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Carefully chosen undefined behavior. For example, in Zig both signed and unsigned integers have undefined behavior on overflow, contrasted to only signed integers in C. This &lt;a class="link" href="https://godbolt.org/z/n_nLEU" target="_blank" rel="noopener"
+&gt;facilitates optimizations that are not available in C&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;- &lt;a class="link" href="https://ziglang.org/learn/overview" target="_blank" rel="noopener"
+&gt;ziglang overview&lt;/a&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;当然, 在Release build里, UB的后果不可预测, 因此, 最好用一些额外手段确保安全, 例如使用checked arithmetics, 产生溢出错误就直接abort, 或者逻辑上确保不会出现overflow.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;无论如何, 用wrap-around的做法逃避算数溢出都不是一个解决方案!&lt;/strong&gt;&lt;/p&gt;
+&lt;h2 id="其它"&gt;其它
+&lt;/h2&gt;&lt;p&gt;对于正常逻辑上非负的数字, 使用signed整形就多出了负数的范围, 可用来作为sentinel值返回错误. 这是十分常见的做法.
+至于这种做法本身适不适合(相比于&lt;code&gt;std::optional&lt;/code&gt;等其它方式), 属于另一个问题.&lt;/p&gt;
+&lt;h1 id="例外情况"&gt;例外情况
+&lt;/h1&gt;&lt;p&gt;这些情况下, 可以允许(或必要)使用unsigned&lt;/p&gt;
+&lt;h2 id="非算数意义"&gt;非算数意义
+&lt;/h2&gt;&lt;h3 id="bitbyte-位操作"&gt;bit/byte, 位操作
+&lt;/h3&gt;&lt;p&gt;众所周知, 如果我们只关心访问一串byte, 此时应该使用&lt;code&gt;unsigned char&lt;/code&gt;来表示字节. 此外, 对于位操作, unsigned整数也更加方便, 例如用于表示一个bit-field.&lt;/p&gt;
+&lt;h3 id="其它-1"&gt;其它
+&lt;/h3&gt;&lt;p&gt;作为一个无算数意义的标记使用. 例如, 一个64位的hash函数一般返回&lt;code&gt;uint64_t&lt;/code&gt;. 还有一些格式里的&lt;code&gt;FOURCC&lt;/code&gt;标记等magic number.
+一个随机发生器的原始输出一般也是unsigned, 作为一串随机的bit使用.&lt;/p&gt;
+&lt;h2 id="需要额外的1-bit位宽范围--省空间"&gt;需要额外的1-bit位宽范围 / 省空间
+&lt;/h2&gt;&lt;p&gt;对于32位, 64位的整形, signed整形正数部分少掉的这一位位宽一般不是问题.
+但是, 如果我们要表示0-255范围的数字, 那就需要用&lt;code&gt;uint8_t&lt;/code&gt;(不考虑&lt;code&gt;CHAR_BIT &amp;gt; 8&lt;/code&gt;的情况), 否则就需要两倍大小. 这种情况下额外的1-bit位宽就matter了.
+8bit图像的表示就是常见的例子, 这里的数值显然是具有算数意义的.&lt;/p&gt;
+&lt;h3 id="char--signed-char--unsigned-char"&gt;char / signed char / unsigned char
+&lt;/h3&gt;&lt;p&gt;注意区分这三个不同的基础类型. &lt;code&gt;unsigned char&lt;/code&gt;表示raw字节. &lt;code&gt;signed char&lt;/code&gt;用于带符号的算数数值. 如上所述, 为了正数位宽也可使用&lt;code&gt;unsigned char&lt;/code&gt;. &lt;code&gt;char&lt;/code&gt;应仅用于字符, 不应依赖它实际是signed还是unsigned.&lt;/p&gt;
+&lt;h2 id="需要wrap-aroundmodular逻辑"&gt;需要wrap-around/modular逻辑
+&lt;/h2&gt;&lt;p&gt;比较少见, 但有时我们事实上确实需要用到wrap-around/modular逻辑&amp;hellip;&lt;/p&gt;
+&lt;h2 id="二进制序列化"&gt;二进制序列化
+&lt;/h2&gt;&lt;p&gt;二进制序列化需要统一的数值二进制表示.
+不考虑端序, 对于正整数的表示一般没有异议, 但负整数可能存在差异(尽管也十分少见, 绝大多数平台都是2&amp;rsquo;s complement表示).
+因此, 二进制序列化/文件格式中, 对于非负的整数数值一般都是直接使用unsigned表示, 包括定点数的存储. 这样做也可以多出1-bit的正数位宽.&lt;/p&gt;
+&lt;h1 id="rust"&gt;Rust
+&lt;/h1&gt;&lt;p&gt;这些规则大部分并不适用于Rust. Rust中基本的整数类型都适用于算数操作, 可以理解为它们只是具有不同的取值范围, 不允许隐式转换, 并且它们之间的显示转换也是安全的, &lt;em&gt;除了 &lt;code&gt;as&lt;/code&gt;&lt;/em&gt;. 对于不安全的转换以及溢出行为, 可以选择使用wrap-around或者panick.&lt;/p&gt;</description></item><item><title>Portable Signal handling</title><link>https://kya8.github.io/p/portable-signal-handling/</link><pubDate>Mon, 20 May 2024 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/portable-signal-handling/</guid><description>&lt;h1 id="stdsignal-and-signal-handlers"&gt;&lt;code&gt;std::signal&lt;/code&gt; and signal handlers
+&lt;/h1&gt;&lt;p&gt;The standard function &lt;code&gt;std::signal&lt;/code&gt; enables registering &lt;em&gt;signal handlers&lt;/em&gt; that are invoked when a given signal is delivered, asynchronously.
+Since the handler can interrupt the execution of the program at potentially any point, actions allowed in the handler are quite limited.
+In particular, the handler is allowed to access a global (with static storage duration) variable that is &lt;code&gt;volatile std::sig_atomic_t&lt;/code&gt; or lock-free &lt;code&gt;std::atomic&amp;lt;...&amp;gt;&lt;/code&gt;.
+This lets us set a flag inside the handler, and correctly check the flag outside the handler.
+Additionally, a signal handler can re-call &lt;code&gt;std::signal&lt;/code&gt; for the same signal that is currently being handled.&lt;/p&gt;
+&lt;p&gt;The POSIX standard specifies additional library functions that are guaranteed to be async-signal-safe, that is, safe to call from signal handlers (See &lt;code&gt;man 7 signal-safety&lt;/code&gt;).
+However on POSIX systems, the &lt;code&gt;sigaction&lt;/code&gt; family of functions should be preferred.&lt;/p&gt;
+&lt;h1 id="portable-ways-to-catch-signals"&gt;Portable ways to catch signals
+&lt;/h1&gt;&lt;p&gt;Suppose we need to catch a signal and inform the program about it, so it can act accordingly. E.g., catching &lt;code&gt;SIGINT&lt;/code&gt; (&lt;code&gt;Ctrl-C&lt;/code&gt;) to perform graceful cleanup and shutdown.
+The canonical way of doing this is to have a dedicated thread that responds to a global flag, which shall be set by the signal handler.&lt;/p&gt;
+&lt;p&gt;Before C++20, there&amp;rsquo;s no platform-independent way, besides polling the flag repeatedly:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt; 1
+&lt;/span&gt;&lt;span class="lnt"&gt; 2
+&lt;/span&gt;&lt;span class="lnt"&gt; 3
+&lt;/span&gt;&lt;span class="lnt"&gt; 4
+&lt;/span&gt;&lt;span class="lnt"&gt; 5
+&lt;/span&gt;&lt;span class="lnt"&gt; 6
+&lt;/span&gt;&lt;span class="lnt"&gt; 7
+&lt;/span&gt;&lt;span class="lnt"&gt; 8
+&lt;/span&gt;&lt;span class="lnt"&gt; 9
+&lt;/span&gt;&lt;span class="lnt"&gt;10
+&lt;/span&gt;&lt;span class="lnt"&gt;11
+&lt;/span&gt;&lt;span class="lnt"&gt;12
+&lt;/span&gt;&lt;span class="lnt"&gt;13
+&lt;/span&gt;&lt;span class="lnt"&gt;14
+&lt;/span&gt;&lt;span class="lnt"&gt;15
+&lt;/span&gt;&lt;span class="lnt"&gt;16
+&lt;/span&gt;&lt;span class="lnt"&gt;17
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-c++" data-lang="c++"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;static&lt;/span&gt; &lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;atomic&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;bool&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="nb"&gt;false&lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt; &lt;span class="c1"&gt;// assuming it&amp;#39;s lock-free
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;extern&lt;/span&gt; &lt;span class="s"&gt;&amp;#34;C&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;void&lt;/span&gt; &lt;span class="n"&gt;signal_handler&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="n"&gt;sig&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sig&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="n"&gt;SIGINT&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;store&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;true&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;void&lt;/span&gt; &lt;span class="nf"&gt;sigint_thread_fn&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="cm"&gt;/*...*/&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="c1"&gt;// demonstration only
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;while&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;this_thread&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;sleep_for&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;chrono&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;milliseconds&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;100&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// precede to perform shutdown actions ...
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// e.g., signaling the main thread to stop.
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;&amp;hellip;Because we don&amp;rsquo;t have a signal-safe function to wait on the atomic flag.&lt;/p&gt;
+&lt;h2 id="stdatomictwait"&gt;&lt;code&gt;std::atomic&amp;lt;T&amp;gt;::wait()&lt;/code&gt;
+&lt;/h2&gt;&lt;p&gt;C++20 introduces &lt;code&gt;wait()&lt;/code&gt; and &lt;code&gt;notify()&lt;/code&gt; methods on &lt;code&gt;std::atomic&amp;lt;T&amp;gt;&lt;/code&gt; and &lt;code&gt;std::atomic_flag&lt;/code&gt;.
+If the atomic type is lock-free (which is always the case for &lt;code&gt;std::atomic_flag&lt;/code&gt;),
+we can safely use &lt;code&gt;wait()&lt;/code&gt; and &lt;code&gt;notify()&lt;/code&gt; in the waiting thread and the signal handler, to avoid the sleep-and-poll loop above.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt; 1
+&lt;/span&gt;&lt;span class="lnt"&gt; 2
+&lt;/span&gt;&lt;span class="lnt"&gt; 3
+&lt;/span&gt;&lt;span class="lnt"&gt; 4
+&lt;/span&gt;&lt;span class="lnt"&gt; 5
+&lt;/span&gt;&lt;span class="lnt"&gt; 6
+&lt;/span&gt;&lt;span class="lnt"&gt; 7
+&lt;/span&gt;&lt;span class="lnt"&gt; 8
+&lt;/span&gt;&lt;span class="lnt"&gt; 9
+&lt;/span&gt;&lt;span class="lnt"&gt;10
+&lt;/span&gt;&lt;span class="lnt"&gt;11
+&lt;/span&gt;&lt;span class="lnt"&gt;12
+&lt;/span&gt;&lt;span class="lnt"&gt;13
+&lt;/span&gt;&lt;span class="lnt"&gt;14
+&lt;/span&gt;&lt;span class="lnt"&gt;15
+&lt;/span&gt;&lt;span class="lnt"&gt;16
+&lt;/span&gt;&lt;span class="lnt"&gt;17
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-c++" data-lang="c++"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;static&lt;/span&gt; &lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;atomic_flag&lt;/span&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;{};&lt;/span&gt; &lt;span class="c1"&gt;// Always lock-free
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// C++20 guarantees it&amp;#39;s initialized to false
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;extern&lt;/span&gt; &lt;span class="s"&gt;&amp;#34;C&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;void&lt;/span&gt; &lt;span class="n"&gt;signal_handler&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="n"&gt;sig&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sig&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="n"&gt;SIGINT&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;test_and_set&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;notify_all&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;void&lt;/span&gt; &lt;span class="nf"&gt;sigint_thread_fn&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="cm"&gt;/*...*/&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;wait&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;false&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt; &lt;span class="c1"&gt;// will block until flag has been changed.
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// ...
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;h1 id="platform-dependent-ways"&gt;Platform-dependent ways
+&lt;/h1&gt;&lt;h2 id="posix"&gt;POSIX
+&lt;/h2&gt;&lt;p&gt;Incrementing a POSIX semaphore (&lt;code&gt;sem_post&lt;/code&gt;) is signal-safe according to the POSIX specification.
+This can be used for notification in signal handlers. The waiting thread would wait via &lt;code&gt;sem_wait&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Alternatively there is &lt;code&gt;sigwaitinfo&lt;/code&gt; and &lt;code&gt;sigwait&lt;/code&gt;, which explicitly wait for pending signals.&lt;/p&gt;
+&lt;p&gt;If you&amp;rsquo;re on Linux, another alternative would be using &lt;code&gt;signalfd&lt;/code&gt; and waiting on the file descriptor (e.g. via &lt;code&gt;epoll&lt;/code&gt;).&lt;/p&gt;
+&lt;h2 id="windows"&gt;Windows
+&lt;/h2&gt;</description></item><item><title>Pointers (again)</title><link>https://kya8.github.io/p/pointers-again/</link><pubDate>Wed, 04 Jan 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/pointers-again/</guid><description>&lt;h1 id="pointer-arithmetics"&gt;Pointer arithmetics
+&lt;/h1&gt;&lt;p&gt;It is well-known that in both C and C++, pointer arithmetics is only meaningful for operands (and the imaginary resultant pointer address) that are related to each other.
+By related we mean, they both point to the same object (or one-past-end), or the same array (or one-past-end).&lt;/p&gt;
+&lt;p&gt;Per C++ standard, pointers are &lt;em&gt;iterators&lt;/em&gt;, not &lt;em&gt;numbers representing address space&lt;/em&gt;, although they&amp;rsquo;re often implemented as such.&lt;/p&gt;
+&lt;p&gt;To quote &lt;a class="link" href="https://stackoverflow.com/a/56038995/17815599" target="_blank" rel="noopener"
+&gt;https://stackoverflow.com/a/56038995/17815599&lt;/a&gt;:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Speaking more academically: &lt;strong&gt;pointers are not numbers&lt;/strong&gt;. They are pointers.&lt;/p&gt;
+&lt;p&gt;It is true that a pointer on your system is implemented as a numerical representation of an address-like representation of a location in some abstract kind of memory (probably a virtual, per-process memory space).&lt;/p&gt;
+&lt;p&gt;But C++ doesn&amp;rsquo;t care about that. C++ wants you to think of pointers as post-its, as bookmarks, to specific objects. The numerical address values are just a side-effect. The &lt;em&gt;only&lt;/em&gt; arithmetic that makes sense on a pointer is &lt;em&gt;forwards and backwards&lt;/em&gt; through an array of objects; nothing else is philosophically meaningful.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;So, &lt;code&gt;p1 - p0&lt;/code&gt; isn&amp;rsquo;t really saying &amp;ldquo;give me the difference between the addresses pointed by &lt;code&gt;p1&lt;/code&gt; and &lt;code&gt;p0&lt;/code&gt;&amp;rdquo;,
+it&amp;rsquo;s saying &amp;ldquo;Assuming they both refer to objects in the same array, what&amp;rsquo;s the difference between their indices inside the array?&amp;rdquo;
+(Here, we consider a single object as an array of length one). If the assumption does not hold, this is undefined behavior.
+For relational (greater than, less than&amp;hellip;) comparisons however, the behavior is &lt;em&gt;unspecified&lt;/em&gt;.&lt;/p&gt;
+&lt;h2 id="what-are-arrays"&gt;what are &amp;ldquo;arrays&amp;rdquo;?
+&lt;/h2&gt;&lt;p&gt;It covers a bit wider than normal (i.e. &lt;code&gt;int arr[]&lt;/code&gt;) arrays.
+In particular, pointer returned by &lt;code&gt;malloc&lt;/code&gt; can be addressed as arrays.&lt;/p&gt;
+&lt;p&gt;Also see &lt;a class="link" href="https://stackoverflow.com/questions/47830449/can-you-do-arithmetic-on-a-char-pointing-at-another-object" target="_blank" rel="noopener"
+&gt;https://stackoverflow.com/questions/47830449/can-you-do-arithmetic-on-a-char-pointing-at-another-object&lt;/a&gt; for aliasing &lt;code&gt;char*&lt;/code&gt; pointers.&lt;/p&gt;
+&lt;h2 id="pointer-to-struct-member"&gt;pointer to struct member
+&lt;/h2&gt;&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;span class="lnt"&gt;4
+&lt;/span&gt;&lt;span class="lnt"&gt;5
+&lt;/span&gt;&lt;span class="lnt"&gt;6
+&lt;/span&gt;&lt;span class="lnt"&gt;7
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-cpp" data-lang="cpp"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="nc"&gt;xyz_s&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="kt"&gt;float&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;z&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;};&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;xyz_s&lt;/span&gt; &lt;span class="n"&gt;pt&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;auto&lt;/span&gt; &lt;span class="n"&gt;px&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;pt&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;auto&lt;/span&gt; &lt;span class="n"&gt;py&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;px&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt; &lt;span class="c1"&gt;// ???
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;&lt;code&gt;xyz&lt;/code&gt; is standard-layout type, which means it has C-like memory layout. However in this example, &lt;em&gt;even if the struct &lt;code&gt;xyz_s&lt;/code&gt; does not contain any paddings&lt;/em&gt;, &lt;code&gt;py&lt;/code&gt; does not actually point to &lt;code&gt;pt.y&lt;/code&gt;. It points to &amp;ldquo;one-past-end&amp;rdquo; of &lt;code&gt;pt.x&lt;/code&gt;!
+That&amp;rsquo;s because there&amp;rsquo;re no arrays here, so &lt;code&gt;py&lt;/code&gt; can only be the &amp;ldquo;one-past-end&amp;rdquo; pointer of &lt;code&gt;pt.x&lt;/code&gt;. Although evaluating &lt;code&gt;px+1&lt;/code&gt; is well-defined, dereferencing the resultant &lt;code&gt;py&lt;/code&gt; is UB. It&amp;rsquo;s not &lt;code&gt;pt.y&lt;/code&gt;!&lt;/p&gt;
+&lt;p&gt;If we change &lt;code&gt;xyz_s&lt;/code&gt; to contain an array of 3 floats, that kind of pointer arithmetic is okay. Also absence of padding in array is guaranteed.&lt;/p&gt;
+&lt;h3 id="padding"&gt;Padding
+&lt;/h3&gt;&lt;p&gt;Actually, the compiler is free to insert paddings inside a struct in an implementation-defined way, &lt;strong&gt;except at the beginning&lt;/strong&gt; of a struct. There&amp;rsquo;s nothing in the standard mandating no paddings in &lt;code&gt;xyz_s&lt;/code&gt;!&lt;/p&gt;
+&lt;p&gt;This is also why there&amp;rsquo;s no guaranteed size for &lt;code&gt;std::array&amp;lt;T, N&amp;gt;&lt;/code&gt;. Even if it only contains a single member &lt;code&gt;T data_[N]&lt;/code&gt;, the compiler can still insert paddings after it.&lt;/p&gt;
+&lt;h2 id="pointer-in-nested-arrays"&gt;pointer in nested arrays
+&lt;/h2&gt;&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;span class="lnt"&gt;4
+&lt;/span&gt;&lt;span class="lnt"&gt;5
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-cpp" data-lang="cpp"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="nc"&gt;Pt3&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="kt"&gt;float&lt;/span&gt; &lt;span class="n"&gt;xyz&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="p"&gt;];&lt;/span&gt; &lt;span class="p"&gt;};&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;vector&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;xyz_s&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;auto&lt;/span&gt; &lt;span class="n"&gt;p0x&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="n"&gt;xyz&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;];&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;auto&lt;/span&gt; &lt;span class="n"&gt;p0z&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;p0x&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="c1"&gt;// okay
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;auto&lt;/span&gt; &lt;span class="n"&gt;p1x&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;p0z&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="c1"&gt;// bad
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;Here, &lt;code&gt;p1x&lt;/code&gt; is still one-past-end of &lt;code&gt;vec[0].xyz[2]&lt;/code&gt;. Because, there&amp;rsquo;s no array of type &lt;code&gt;float&lt;/code&gt; and length &lt;code&gt;N*3&lt;/code&gt;! And consider possible paddings mentioned above.&lt;/p&gt;
+&lt;h1 id="pointer-to-first-member-of-standard-layout-struct"&gt;Pointer to first member of (standard layout) struct
+&lt;/h1&gt;&lt;p&gt;(By &amp;ldquo;first&amp;rdquo; we mean the first declared member)&lt;/p&gt;
+&lt;p&gt;Ref: &lt;a class="link" href="https://en.cppreference.com/w/cpp/language/static_cast#Pointer-interconvertible_objects" target="_blank" rel="noopener"
+&gt;https://en.cppreference.com/w/cpp/language/static_cast#Pointer-interconvertible_objects&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Two objects a and b are &lt;em&gt;pointer-interconvertible&lt;/em&gt; if:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;they are the same object, or&lt;/li&gt;
+&lt;li&gt;one is a union object and the other is a non-static data member of that object, or&lt;/li&gt;
+&lt;li&gt;one is a standard-layout class object and the other is the first non-static data member of that object or any base class subobject of that object, or&lt;/li&gt;
+&lt;li&gt;there exists an object c such that a and c are pointer-interconvertible, and c and b are pointer-interconvertible.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&amp;hellip;combined with pointer conversion rules, it&amp;rsquo;s possible to convert between pointer to a standard-layout struct and pointer to its first member, via an intermediate &lt;code&gt;void*&lt;/code&gt; pointer.&lt;/p&gt;
+&lt;h1 id="pointer-total-order"&gt;Pointer total order
+&lt;/h1&gt;&lt;p&gt;There is actually one exception to the &amp;ldquo;same-object-or-array&amp;rdquo; rule: the total order of pointers in C++.
+It only applies to comparison functors, &lt;code&gt;std::less&lt;/code&gt;, &lt;code&gt;std::greater&lt;/code&gt; etc. This total order is consistent with defined pointer comparison rules of the built-in comparison operators.
+For the unspecified case, the result becomes implementation-defined.&lt;/p&gt;
+&lt;p&gt;Note that in C, relational comparison of unrelated pointers is &lt;em&gt;undefined&lt;/em&gt;.&lt;/p&gt;</description></item></channel></rss>

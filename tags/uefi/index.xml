@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Uefi on Kya's Blog</title><link>https://kya8.github.io/tags/uefi/</link><description>Recent content in Uefi on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Sun, 01 Aug 2021 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/uefi/index.xml" rel="self" type="application/rss+xml"/><item><title>Emulating ARM on QEMU, with UEFI</title><link>https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/</link><pubDate>Wed, 28 Jul 2021 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/</guid><description>&lt;p&gt;Emulating ARM machines on QEMU hasn&amp;rsquo;t been straight-forward due to lack of a
+standardized way to configure the bootloader across different ARM boards. One
+had to extract the kernel image, and specify the boot options on the command
+line (&lt;code&gt;-kernel&lt;/code&gt;, &lt;code&gt;-initrd&lt;/code&gt;), so QEMU knows what to do with its machine-specific
+boot code.&lt;/p&gt;
+&lt;p&gt;We can make things easier with the help of UEFI (namely EDK2, with ARM support), so
+installing and booting Linux just works like on a x86 PC target.&lt;/p&gt;
+&lt;h1 id="prerequisites"&gt;Prerequisites
+&lt;/h1&gt;&lt;ul&gt;
+&lt;li&gt;QEMU system emulator for ARM.&lt;/li&gt;
+&lt;li&gt;EDK2 binaries for ARM. They can be extracted from the debian package
+&lt;code&gt;qemu-efi-arm&lt;/code&gt; or &lt;code&gt;qemu-efi-aarch64&lt;/code&gt;, depending on your target arch.&lt;/li&gt;
+&lt;li&gt;Official Debian installer iso for ARM.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h1 id="booting-the-installer"&gt;Booting the installer
+&lt;/h1&gt;&lt;blockquote&gt;
+&lt;p&gt;&lt;strong&gt;NOTE:&lt;/strong&gt; This example is for arm32&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;First of all, create a new disk image via &lt;code&gt;qemu-img&lt;/code&gt;. Copy EDK2 FW binaries
+(&lt;code&gt;AAVMF32_CODE.fd&lt;/code&gt; and &lt;code&gt;AAVMF32_VARS.fd&lt;/code&gt;, the latter is for hosting volatile
+variables) and the installer image to the same directory.&lt;/p&gt;
+&lt;p&gt;We will be emulating the &lt;code&gt;virt&lt;/code&gt; board, which has support for virtio devices.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;span class="lnt"&gt;4
+&lt;/span&gt;&lt;span class="lnt"&gt;5
+&lt;/span&gt;&lt;span class="lnt"&gt;6
+&lt;/span&gt;&lt;span class="lnt"&gt;7
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;qemu-system-arm -M virt -m 512M -cpu cortex-a15 -smp 4 \
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-device qemu-xhci -device usb-kbd \
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-device usb-storage,drive=install -blockdev file,filename=debian-testing-armhf-DVD-1.iso,node-name=install \
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-blockdev qcow2,node-name=root,file.driver=file,file.filename=disk0.qcow2 -device virtio-blk-device,drive=root \
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-nic user,model=virtio \
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-pflash ./AAVMF32_CODE.fd -pflash ./AAVMF32_VARS.fd \
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-device ramfb
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;ul&gt;
+&lt;li&gt;The system is given 512M of RAM and 4 cpus
+(depending on your QEMU version, this could mean either 4 sockets or 4 cores),
+the CPU capability is set to &lt;code&gt;cortex-a15&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;-device qemu-xhci -device usb-kbd&lt;/code&gt; attaches a low-overhead USB XHCI bus, and
+a USB keyboard. You could add a mouse if needed.
+Alternatively, on-board USB support that comes with &lt;code&gt;virt&lt;/code&gt; is available by passing &lt;code&gt;-usb&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;Next two lines attach the installer iso as a USB storage device, and the
+rootfs disk as a virtio block device.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;-nic user,model=virtio&lt;/code&gt; enables basic user-mode networking, backed by the
+virtio NIC.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;-device ramfb&lt;/code&gt; adds a simple display device, which is just a frambuffer in
+guest memory. QEMU ARM system emulator does not emulate a display device by
+default. The standard &lt;code&gt;std&lt;/code&gt; VGA won&amp;rsquo;t work since the installer environment
+lacks required DRM kmods.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The graphics &amp;amp; input part can be left-out (with &lt;code&gt;-nographic&lt;/code&gt;),
+in which case the installer will be presented on the serial console.&lt;/p&gt;
+&lt;p&gt;The guest will now boot into the installer iso. Simply
+follow the installation instructions, the grub-efi bootloader will be installed to the EFI firmware automatically.&lt;/p&gt;
+&lt;h1 id="booting-the-installed-system"&gt;Booting the installed system
+&lt;/h1&gt;&lt;p&gt;No additional configuration is required.
+Don&amp;rsquo;t forget to attach the UEFI firmware via &lt;code&gt;-pflash&lt;/code&gt;.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;span class="lnt"&gt;3
+&lt;/span&gt;&lt;span class="lnt"&gt;4
+&lt;/span&gt;&lt;span class="lnt"&gt;5
+&lt;/span&gt;&lt;span class="lnt"&gt;6
+&lt;/span&gt;&lt;span class="lnt"&gt;7
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-text" data-lang="text"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;qemu-system-arm -M virt -m 512M -cpu cortex-a15 -smp 4 \
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-device qemu-xhci -device usb-kbd \
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-blockdev qcow2,node-name=root,file.driver=file,file.filename=disk0.qcow2 -device virtio-blk-device,drive=root \
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-nic user,model=virtio,hostfwd=tcp::2345-:22 \
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-pflash ./AAVMF32_CODE.fd -pflash ./AAVMF32_VARS.fd \
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-device VGA
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-virtfs local,path=/host/path/to/shared/,id=share,mount_tag=share,security_model=mapped
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;There are a few additional configurations:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Host porting forwarding is enabled for host port 2345, to guest port 22.
+This way we are able to ssh directly into the guest system.&lt;/li&gt;
+&lt;li&gt;Attach a shared folder to the guest, backed by &lt;code&gt;9pfs&lt;/code&gt;.
+The folder can be mounted in the guest via &lt;code&gt;mount -t 9p -o trans=virtio share /path/to/mount&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;img src="https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/qemu-arm.png"
+width="1154"
+height="954"
+srcset="https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/qemu-arm_hu_65440fef599dd3ca.png 480w, https://kya8.github.io/p/emulating-arm-on-qemu-with-uefi/qemu-arm_hu_5737c38876d4b0c7.png 1024w"
+loading="lazy"
+alt="booted system"
+class="gallery-image"
+data-flex-grow="120"
+data-flex-basis="290px"
+&gt;&lt;/p&gt;
+&lt;p&gt;Voilà! Your new virtual ARM system is ready to go!&lt;/p&gt;</description></item></channel></rss>

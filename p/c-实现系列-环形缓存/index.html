@@ -1,0 +1,369 @@
+<!doctype html><html lang=en-us dir=ltr><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><meta name=description content='背景 环形缓存(ring buffer)是一种简单高效的数据结构, 想必不需要过多介绍. 这篇文章主要是以实现一个环形缓存容器类为例, 讲述实现C++容器类过程中的一些注意事项和最佳实践.\n已有的环形缓存实现有boost::circular_buffer, 提供与STL容器兼容的API.\n实现要求及细节考虑 首先, 环形缓存的自身基本功能. 尽量提供与STL容器相同或相似的API. 支持用户自定义的allocator. 默认使用std::allocator. 如果是stateless的allocator, 不占用额外空间. &mldr; 实现 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137 138 139 template <typename T, typename Allocator = std::allocator<T>> class RingBuffer { private: using alloc_traits = std::allocator_traits<Allocator>; public: using size_type = typename alloc_traits::size_type; using difference_type = typename alloc_traits::difference_type; using value_type = T; using reference = value_type&; using const_reference = const value_type&; using pointer = typename alloc_traits::pointer; using const_pointer = typename alloc_traits::const_pointer; //iterator = ...; using allocator_type = Allocator; RingBuffer(size_type max, const allocator_type& alloc = allocator_type{}) : alloc_and_data_{alloc, {}}, first_(0), count_(0), max_(max) { alloc_and_data_.second() = alloc_traits::allocate(alloc_(), max); } ~RingBuffer() noexcept { clear(); alloc_traits::deallocate(alloc_(), data_(), max_); } RingBuffer(RingBuffer&& rhs) noexcept : alloc_and_data_{std::move(rhs.alloc_and_data_)}, // ensure moving the allocator. The pointer is copied. first_{rhs.first_}, count_{rhs.count_}, max_{rhs.max_} { rhs.alloc_and_data_.second() = nullptr; rhs.count_ = 0; rhs.max_ = 0; rhs.first_ = 0; // rhs shouldn&#39;t be used anymore } RingBuffer& operator=(RingBuffer&& rhs) noexcept { clear(); alloc_traits::deallocate(alloc_(), data_(), max_); alloc_and_data_ = std::move(rhs.alloc_and_data_); // ensure moving the allocator first_ = rhs.first_; count_ = rhs.count_; max_ = rhs.max_; rhs.alloc_and_data_.second() = nullptr; rhs.count_ = 0; rhs.max_ = 0; rhs.first_ = 0; // rhs shouldn&#39;t be used anymore return *this; } private: template<class V> bool push_impl(V&& value) { if (count_ == max_) return false; alloc_traits::construct(alloc_(), data_() + (first_+count_)%max_, std::forward<V>(value)); ++count_; return true; } template<class V> void push_overwrite_impl(V&& value) { if (count_ == max_) pop(); alloc_traits::construct(alloc_(), data_() + (first_+count_)%max_, std::forward<V>(value)); ++count_; } public: bool push(const T& value) { return push_impl(value); } bool push(T&& value) { return push_impl(std::move(value)); } void push_overwrite(const T& value) { return push_overwrite_impl(value); } void push_overwrite(T&& value) { return push_overwrite_impl(std::move(value)); } template <typename ...Args> auto& emplace(Args&& ...args) { if (count_ == max_) pop(); const auto ptr = data_() + (first_+count_) % max_; alloc_traits::construct(alloc_(), ptr, std::forward<Args>(args)...); ++count_; return *ptr; } void pop() noexcept { // UB if empty alloc_traits::destroy(alloc_(), data_()+first_); first_ = (first_+1) % max_; --count_; } void pop_back() noexcept { alloc_traits::destroy(alloc_(), data_() + (first_+count_-1) % max_); --count_; } const auto& operator[](size_type i) const noexcept { return data_()[(first_+i) % max_]; } auto& operator[](size_type i) noexcept { return data_()[(first_+i) % max_]; } auto& at(size_type i) { if (i >= count_) throw std::out_of_range("RingBuffer subscription out of range"); return (*this)[i]; } auto& at(size_type i) const { if (i >= count_) throw std::out_of_range("RingBuffer subscription out of range"); return (*this)[i]; } auto& front() const noexcept { return (*this)[0]; } auto& front() noexcept { return (*this)[0]; } auto& back() const noexcept { return (*this)[count_ - 1]; } auto& back() noexcept { return (*this)[count_ - 1]; } bool empty() const noexcept { return count_ == 0; } size_type size() const noexcept { return count_; } size_type capacity() const noexcept { return max_; } void clear() noexcept { for (auto i=first_; i<first_ + count_; ++i) { alloc_traits::destroy(alloc_(), &amp;data_()[i % max_]); --count_; } } private: CompressPair<allocator_type, T*> alloc_and_data_; auto& alloc_() noexcept { return alloc_and_data_.first(); } auto data_() const noexcept { return alloc_and_data_.second(); } size_type first_; size_type count_; size_type max_; }; RingBuffer的最大容量必须在构建时指定. 并且, 所有的动态内存分配也在构建时完成. 此外用户也可以指定自定义的Allocator.\n'><title>C++实现系列: 环形缓存</title><link rel=canonical href=https://kya8.github.io/p/c-%E5%AE%9E%E7%8E%B0%E7%B3%BB%E5%88%97-%E7%8E%AF%E5%BD%A2%E7%BC%93%E5%AD%98/><link rel=stylesheet href=/scss/style.min.8659d82dbe8d0fe183ef22445ed42765c7d1d996ae5b4a02725eda69426286da.css><meta property='og:title' content="C++实现系列: 环形缓存"><meta property='og:description' content='背景 环形缓存(ring buffer)是一种简单高效的数据结构, 想必不需要过多介绍. 这篇文章主要是以实现一个环形缓存容器类为例, 讲述实现C++容器类过程中的一些注意事项和最佳实践.\n已有的环形缓存实现有boost::circular_buffer, 提供与STL容器兼容的API.\n实现要求及细节考虑 首先, 环形缓存的自身基本功能. 尽量提供与STL容器相同或相似的API. 支持用户自定义的allocator. 默认使用std::allocator. 如果是stateless的allocator, 不占用额外空间. &mldr; 实现 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137 138 139 template <typename T, typename Allocator = std::allocator<T>> class RingBuffer { private: using alloc_traits = std::allocator_traits<Allocator>; public: using size_type = typename alloc_traits::size_type; using difference_type = typename alloc_traits::difference_type; using value_type = T; using reference = value_type&; using const_reference = const value_type&; using pointer = typename alloc_traits::pointer; using const_pointer = typename alloc_traits::const_pointer; //iterator = ...; using allocator_type = Allocator; RingBuffer(size_type max, const allocator_type& alloc = allocator_type{}) : alloc_and_data_{alloc, {}}, first_(0), count_(0), max_(max) { alloc_and_data_.second() = alloc_traits::allocate(alloc_(), max); } ~RingBuffer() noexcept { clear(); alloc_traits::deallocate(alloc_(), data_(), max_); } RingBuffer(RingBuffer&& rhs) noexcept : alloc_and_data_{std::move(rhs.alloc_and_data_)}, // ensure moving the allocator. The pointer is copied. first_{rhs.first_}, count_{rhs.count_}, max_{rhs.max_} { rhs.alloc_and_data_.second() = nullptr; rhs.count_ = 0; rhs.max_ = 0; rhs.first_ = 0; // rhs shouldn&#39;t be used anymore } RingBuffer& operator=(RingBuffer&& rhs) noexcept { clear(); alloc_traits::deallocate(alloc_(), data_(), max_); alloc_and_data_ = std::move(rhs.alloc_and_data_); // ensure moving the allocator first_ = rhs.first_; count_ = rhs.count_; max_ = rhs.max_; rhs.alloc_and_data_.second() = nullptr; rhs.count_ = 0; rhs.max_ = 0; rhs.first_ = 0; // rhs shouldn&#39;t be used anymore return *this; } private: template<class V> bool push_impl(V&& value) { if (count_ == max_) return false; alloc_traits::construct(alloc_(), data_() + (first_+count_)%max_, std::forward<V>(value)); ++count_; return true; } template<class V> void push_overwrite_impl(V&& value) { if (count_ == max_) pop(); alloc_traits::construct(alloc_(), data_() + (first_+count_)%max_, std::forward<V>(value)); ++count_; } public: bool push(const T& value) { return push_impl(value); } bool push(T&& value) { return push_impl(std::move(value)); } void push_overwrite(const T& value) { return push_overwrite_impl(value); } void push_overwrite(T&& value) { return push_overwrite_impl(std::move(value)); } template <typename ...Args> auto& emplace(Args&& ...args) { if (count_ == max_) pop(); const auto ptr = data_() + (first_+count_) % max_; alloc_traits::construct(alloc_(), ptr, std::forward<Args>(args)...); ++count_; return *ptr; } void pop() noexcept { // UB if empty alloc_traits::destroy(alloc_(), data_()+first_); first_ = (first_+1) % max_; --count_; } void pop_back() noexcept { alloc_traits::destroy(alloc_(), data_() + (first_+count_-1) % max_); --count_; } const auto& operator[](size_type i) const noexcept { return data_()[(first_+i) % max_]; } auto& operator[](size_type i) noexcept { return data_()[(first_+i) % max_]; } auto& at(size_type i) { if (i >= count_) throw std::out_of_range("RingBuffer subscription out of range"); return (*this)[i]; } auto& at(size_type i) const { if (i >= count_) throw std::out_of_range("RingBuffer subscription out of range"); return (*this)[i]; } auto& front() const noexcept { return (*this)[0]; } auto& front() noexcept { return (*this)[0]; } auto& back() const noexcept { return (*this)[count_ - 1]; } auto& back() noexcept { return (*this)[count_ - 1]; } bool empty() const noexcept { return count_ == 0; } size_type size() const noexcept { return count_; } size_type capacity() const noexcept { return max_; } void clear() noexcept { for (auto i=first_; i<first_ + count_; ++i) { alloc_traits::destroy(alloc_(), &amp;data_()[i % max_]); --count_; } } private: CompressPair<allocator_type, T*> alloc_and_data_; auto& alloc_() noexcept { return alloc_and_data_.first(); } auto data_() const noexcept { return alloc_and_data_.second(); } size_type first_; size_type count_; size_type max_; }; RingBuffer的最大容量必须在构建时指定. 并且, 所有的动态内存分配也在构建时完成. 此外用户也可以指定自定义的Allocator.\n'><meta property='og:url' content='https://kya8.github.io/p/c-%E5%AE%9E%E7%8E%B0%E7%B3%BB%E5%88%97-%E7%8E%AF%E5%BD%A2%E7%BC%93%E5%AD%98/'><meta property='og:site_name' content="Kya's Blog"><meta property='og:type' content='article'><meta property='article:section' content='Post'><meta property='article:tag' content='c++'><meta property='article:tag' content='container'><meta property='article:published_time' content='2023-11-16T00:00:00+00:00'><meta property='article:modified_time' content='2023-11-16T00:00:00+00:00'><meta name=twitter:title content="C++实现系列: 环形缓存"><meta name=twitter:description content='背景 环形缓存(ring buffer)是一种简单高效的数据结构, 想必不需要过多介绍. 这篇文章主要是以实现一个环形缓存容器类为例, 讲述实现C++容器类过程中的一些注意事项和最佳实践.\n已有的环形缓存实现有boost::circular_buffer, 提供与STL容器兼容的API.\n实现要求及细节考虑 首先, 环形缓存的自身基本功能. 尽量提供与STL容器相同或相似的API. 支持用户自定义的allocator. 默认使用std::allocator. 如果是stateless的allocator, 不占用额外空间. &mldr; 实现 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137 138 139 template <typename T, typename Allocator = std::allocator<T>> class RingBuffer { private: using alloc_traits = std::allocator_traits<Allocator>; public: using size_type = typename alloc_traits::size_type; using difference_type = typename alloc_traits::difference_type; using value_type = T; using reference = value_type&; using const_reference = const value_type&; using pointer = typename alloc_traits::pointer; using const_pointer = typename alloc_traits::const_pointer; //iterator = ...; using allocator_type = Allocator; RingBuffer(size_type max, const allocator_type& alloc = allocator_type{}) : alloc_and_data_{alloc, {}}, first_(0), count_(0), max_(max) { alloc_and_data_.second() = alloc_traits::allocate(alloc_(), max); } ~RingBuffer() noexcept { clear(); alloc_traits::deallocate(alloc_(), data_(), max_); } RingBuffer(RingBuffer&& rhs) noexcept : alloc_and_data_{std::move(rhs.alloc_and_data_)}, // ensure moving the allocator. The pointer is copied. first_{rhs.first_}, count_{rhs.count_}, max_{rhs.max_} { rhs.alloc_and_data_.second() = nullptr; rhs.count_ = 0; rhs.max_ = 0; rhs.first_ = 0; // rhs shouldn&#39;t be used anymore } RingBuffer& operator=(RingBuffer&& rhs) noexcept { clear(); alloc_traits::deallocate(alloc_(), data_(), max_); alloc_and_data_ = std::move(rhs.alloc_and_data_); // ensure moving the allocator first_ = rhs.first_; count_ = rhs.count_; max_ = rhs.max_; rhs.alloc_and_data_.second() = nullptr; rhs.count_ = 0; rhs.max_ = 0; rhs.first_ = 0; // rhs shouldn&#39;t be used anymore return *this; } private: template<class V> bool push_impl(V&& value) { if (count_ == max_) return false; alloc_traits::construct(alloc_(), data_() + (first_+count_)%max_, std::forward<V>(value)); ++count_; return true; } template<class V> void push_overwrite_impl(V&& value) { if (count_ == max_) pop(); alloc_traits::construct(alloc_(), data_() + (first_+count_)%max_, std::forward<V>(value)); ++count_; } public: bool push(const T& value) { return push_impl(value); } bool push(T&& value) { return push_impl(std::move(value)); } void push_overwrite(const T& value) { return push_overwrite_impl(value); } void push_overwrite(T&& value) { return push_overwrite_impl(std::move(value)); } template <typename ...Args> auto& emplace(Args&& ...args) { if (count_ == max_) pop(); const auto ptr = data_() + (first_+count_) % max_; alloc_traits::construct(alloc_(), ptr, std::forward<Args>(args)...); ++count_; return *ptr; } void pop() noexcept { // UB if empty alloc_traits::destroy(alloc_(), data_()+first_); first_ = (first_+1) % max_; --count_; } void pop_back() noexcept { alloc_traits::destroy(alloc_(), data_() + (first_+count_-1) % max_); --count_; } const auto& operator[](size_type i) const noexcept { return data_()[(first_+i) % max_]; } auto& operator[](size_type i) noexcept { return data_()[(first_+i) % max_]; } auto& at(size_type i) { if (i >= count_) throw std::out_of_range("RingBuffer subscription out of range"); return (*this)[i]; } auto& at(size_type i) const { if (i >= count_) throw std::out_of_range("RingBuffer subscription out of range"); return (*this)[i]; } auto& front() const noexcept { return (*this)[0]; } auto& front() noexcept { return (*this)[0]; } auto& back() const noexcept { return (*this)[count_ - 1]; } auto& back() noexcept { return (*this)[count_ - 1]; } bool empty() const noexcept { return count_ == 0; } size_type size() const noexcept { return count_; } size_type capacity() const noexcept { return max_; } void clear() noexcept { for (auto i=first_; i<first_ + count_; ++i) { alloc_traits::destroy(alloc_(), &amp;data_()[i % max_]); --count_; } } private: CompressPair<allocator_type, T*> alloc_and_data_; auto& alloc_() noexcept { return alloc_and_data_.first(); } auto data_() const noexcept { return alloc_and_data_.second(); } size_type first_; size_type count_; size_type max_; }; RingBuffer的最大容量必须在构建时指定. 并且, 所有的动态内存分配也在构建时完成. 此外用户也可以指定自定义的Allocator.\n'></head><body class=article-page><script>(function(){const e="StackColorScheme";localStorage.getItem(e)||localStorage.setItem(e,"auto")})()</script><script>(function(){const t="StackColorScheme",e=localStorage.getItem(t),n=window.matchMedia("(prefers-color-scheme: dark)").matches===!0;e=="dark"||e==="auto"&&n?document.documentElement.dataset.scheme="dark":document.documentElement.dataset.scheme="light"})()</script><div class="container main-container flex on-phone--column extended"><aside class="sidebar left-sidebar sticky"><button class="hamburger hamburger--spin" type=button id=toggle-menu aria-label="Toggle Menu">
+<span class=hamburger-box><span class=hamburger-inner></span></span></button><header><div class=site-meta><h1 class=site-name><a href=/>Kya's Blog</a></h1><h2 class=site-description></h2></div></header><ol class=menu-social><li><a href=https://github.com/kya8 target=_blank title=GitHub rel=me><svg class="icon icon-tabler icon-tabler-brand-github" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6.0 00-1.3-3.2 4.2 4.2.0 00-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3.0 00-6.2.0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2.0 00-.1 3.2A4.6 4.6.0 004 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg></a></li></ol><ol class=menu id=main-menu><li><a href=/><svg class="icon icon-tabler icon-tabler-home" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><polyline points="5 12 3 12 12 3 21 12 19 12"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/><path d="M9 21v-6a2 2 0 012-2h2a2 2 0 012 2v6"/></svg>
+<span>Home</span></a></li><li><a href=/archives/><svg class="icon icon-tabler icon-tabler-archive" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><rect x="3" y="4" width="18" height="4" rx="2"/><path d="M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+<span>Archives</span></a></li><li><a href=/search/><svg class="icon icon-tabler icon-tabler-search" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15" y2="15"/></svg>
+<span>Search</span></a></li><li class=menu-bottom-section><ol class=menu><li id=dark-mode-toggle><svg class="icon icon-tabler icon-tabler-toggle-left" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="8" cy="12" r="2"/><rect x="2" y="6" width="20" height="12" rx="6"/></svg>
+<svg class="icon icon-tabler icon-tabler-toggle-right" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="16" cy="12" r="2"/><rect x="2" y="6" width="20" height="12" rx="6"/></svg>
+<span>Dark Mode</span></li></ol></li></ol></aside><aside class="sidebar right-sidebar sticky"><section class="widget archives"><div class=widget-icon><svg class="icon icon-tabler icon-tabler-hash" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><line x1="5" y1="9" x2="19" y2="9"/><line x1="5" y1="15" x2="19" y2="15"/><line x1="11" y1="4" x2="7" y2="20"/><line x1="17" y1="4" x2="13" y2="20"/></svg></div><h2 class="widget-title section-title">Table of contents</h2><div class=widget--toc><nav id=TableOfContents><ol><li><a href=#背景>背景</a><ol><li><a href=#实现要求及细节考虑>实现要求及细节考虑</a></li></ol></li><li><a href=#实现>实现</a><ol><li><a href=#空基类优化-empty-base-optimization>空基类优化 (Empty Base Optimization)</a></li><li><a href=#allocator的使用>allocator的使用</a><ol><li><a href=#内存分配与对象构建>内存分配与对象构建</a></li></ol></li><li><a href=#move操作>Move操作</a></li><li><a href=#左值与右值引用的重载>左值与右值引用的重载</a></li></ol></li><li><a href=#未完成的部分>未完成的部分</a></li></ol></nav></div></section></aside><main class="main full-width"><article class=main-article><header class=article-header><div class=article-details><div class=article-title-wrapper><h2 class=article-title><a href=/p/c-%E5%AE%9E%E7%8E%B0%E7%B3%BB%E5%88%97-%E7%8E%AF%E5%BD%A2%E7%BC%93%E5%AD%98/>C++实现系列: 环形缓存</a></h2></div><footer class=article-time><div><svg class="icon icon-tabler icon-tabler-calendar-time" width="56" height="56" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><path d="M11.795 21H5a2 2 0 01-2-2V7a2 2 0 012-2h12a2 2 0 012 2v4"/><circle cx="18" cy="18" r="4"/><path d="M15 3v4"/><path d="M7 3v4"/><path d="M3 11h16"/><path d="M18 16.496V18l1 1"/></svg>
+<time class=article-time--published>Nov 16, 2023</time></div><div><svg class="icon icon-tabler icon-tabler-clock" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+<time class=article-time--reading>5 minute read</time></div></footer></div></header><section class=article-content><h1 id=背景>背景</h1><p>环形缓存(ring buffer)是一种简单高效的数据结构, 想必不需要过多介绍.
+这篇文章主要是以实现一个环形缓存容器类为例, 讲述实现C++容器类过程中的一些注意事项和最佳实践.</p><p>已有的环形缓存实现有<code>boost::circular_buffer</code>, 提供与STL容器兼容的API.</p><h2 id=实现要求及细节考虑>实现要求及细节考虑</h2><ul><li>首先, 环形缓存的自身基本功能.</li><li>尽量提供与STL容器相同或相似的API.</li><li>支持用户自定义的allocator. 默认使用std::allocator. 如果是stateless的allocator, 不占用额外空间.</li><li>&mldr;</li></ul><h1 id=实现>实现</h1><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-cpp data-lang=cpp><span class=line><span class=cl><span class=k>template</span> <span class=o>&lt;</span><span class=k>typename</span> <span class=n>T</span><span class=p>,</span> <span class=k>typename</span> <span class=n>Allocator</span> <span class=o>=</span> <span class=n>std</span><span class=o>::</span><span class=n>allocator</span><span class=o>&lt;</span><span class=n>T</span><span class=o>&gt;&gt;</span>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>RingBuffer</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl><span class=k>private</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=k>using</span> <span class=n>alloc_traits</span> <span class=o>=</span> <span class=n>std</span><span class=o>::</span><span class=n>allocator_traits</span><span class=o>&lt;</span><span class=n>Allocator</span><span class=o>&gt;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>public</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=k>using</span> <span class=n>size_type</span>       <span class=o>=</span> <span class=k>typename</span> <span class=n>alloc_traits</span><span class=o>::</span><span class=n>size_type</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>using</span> <span class=n>difference_type</span> <span class=o>=</span> <span class=k>typename</span> <span class=n>alloc_traits</span><span class=o>::</span><span class=n>difference_type</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>using</span> <span class=n>value_type</span>      <span class=o>=</span> <span class=n>T</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>using</span> <span class=n>reference</span>       <span class=o>=</span> <span class=n>value_type</span><span class=o>&amp;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>using</span> <span class=n>const_reference</span> <span class=o>=</span> <span class=k>const</span> <span class=n>value_type</span><span class=o>&amp;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>using</span> <span class=n>pointer</span>         <span class=o>=</span> <span class=k>typename</span> <span class=n>alloc_traits</span><span class=o>::</span><span class=n>pointer</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>using</span> <span class=n>const_pointer</span>   <span class=o>=</span> <span class=k>typename</span> <span class=n>alloc_traits</span><span class=o>::</span><span class=n>const_pointer</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=c1>//iterator = ...;
+</span></span></span><span class=line><span class=cl>    <span class=k>using</span> <span class=n>allocator_type</span>  <span class=o>=</span> <span class=n>Allocator</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>RingBuffer</span><span class=p>(</span><span class=n>size_type</span> <span class=n>max</span><span class=p>,</span> <span class=k>const</span> <span class=n>allocator_type</span><span class=o>&amp;</span> <span class=n>alloc</span> <span class=o>=</span> <span class=n>allocator_type</span><span class=p>{})</span>
+</span></span><span class=line><span class=cl>    <span class=o>:</span> <span class=n>alloc_and_data_</span><span class=p>{</span><span class=n>alloc</span><span class=p>,</span> <span class=p>{}},</span> <span class=n>first_</span><span class=p>(</span><span class=mi>0</span><span class=p>),</span> <span class=n>count_</span><span class=p>(</span><span class=mi>0</span><span class=p>),</span> <span class=n>max_</span><span class=p>(</span><span class=n>max</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>alloc_and_data_</span><span class=p>.</span><span class=n>second</span><span class=p>()</span> <span class=o>=</span> <span class=n>alloc_traits</span><span class=o>::</span><span class=n>allocate</span><span class=p>(</span><span class=n>alloc_</span><span class=p>(),</span> <span class=n>max</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=o>~</span><span class=n>RingBuffer</span><span class=p>()</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>clear</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=n>alloc_traits</span><span class=o>::</span><span class=n>deallocate</span><span class=p>(</span><span class=n>alloc_</span><span class=p>(),</span> <span class=n>data_</span><span class=p>(),</span> <span class=n>max_</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>RingBuffer</span><span class=p>(</span><span class=n>RingBuffer</span><span class=o>&amp;&amp;</span> <span class=n>rhs</span><span class=p>)</span> <span class=k>noexcept</span> <span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=n>alloc_and_data_</span><span class=p>{</span><span class=n>std</span><span class=o>::</span><span class=n>move</span><span class=p>(</span><span class=n>rhs</span><span class=p>.</span><span class=n>alloc_and_data_</span><span class=p>)},</span> <span class=c1>// ensure moving the allocator. The pointer is copied.
+</span></span></span><span class=line><span class=cl>    <span class=n>first_</span><span class=p>{</span><span class=n>rhs</span><span class=p>.</span><span class=n>first_</span><span class=p>},</span>
+</span></span><span class=line><span class=cl>    <span class=n>count_</span><span class=p>{</span><span class=n>rhs</span><span class=p>.</span><span class=n>count_</span><span class=p>},</span>
+</span></span><span class=line><span class=cl>    <span class=n>max_</span><span class=p>{</span><span class=n>rhs</span><span class=p>.</span><span class=n>max_</span><span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>rhs</span><span class=p>.</span><span class=n>alloc_and_data_</span><span class=p>.</span><span class=n>second</span><span class=p>()</span> <span class=o>=</span> <span class=k>nullptr</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>rhs</span><span class=p>.</span><span class=n>count_</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>rhs</span><span class=p>.</span><span class=n>max_</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>rhs</span><span class=p>.</span><span class=n>first_</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// rhs shouldn&#39;t be used anymore
+</span></span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>RingBuffer</span><span class=o>&amp;</span> <span class=k>operator</span><span class=o>=</span><span class=p>(</span><span class=n>RingBuffer</span><span class=o>&amp;&amp;</span> <span class=n>rhs</span><span class=p>)</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>clear</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=n>alloc_traits</span><span class=o>::</span><span class=n>deallocate</span><span class=p>(</span><span class=n>alloc_</span><span class=p>(),</span> <span class=n>data_</span><span class=p>(),</span> <span class=n>max_</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=n>alloc_and_data_</span> <span class=o>=</span> <span class=n>std</span><span class=o>::</span><span class=n>move</span><span class=p>(</span><span class=n>rhs</span><span class=p>.</span><span class=n>alloc_and_data_</span><span class=p>);</span> <span class=c1>// ensure moving the allocator
+</span></span></span><span class=line><span class=cl>        <span class=n>first_</span> <span class=o>=</span> <span class=n>rhs</span><span class=p>.</span><span class=n>first_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>count_</span> <span class=o>=</span> <span class=n>rhs</span><span class=p>.</span><span class=n>count_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>max_</span> <span class=o>=</span> <span class=n>rhs</span><span class=p>.</span><span class=n>max_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>rhs</span><span class=p>.</span><span class=n>alloc_and_data_</span><span class=p>.</span><span class=n>second</span><span class=p>()</span> <span class=o>=</span> <span class=k>nullptr</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>rhs</span><span class=p>.</span><span class=n>count_</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>rhs</span><span class=p>.</span><span class=n>max_</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>rhs</span><span class=p>.</span><span class=n>first_</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// rhs shouldn&#39;t be used anymore
+</span></span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>*</span><span class=k>this</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>private</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=k>template</span><span class=o>&lt;</span><span class=k>class</span> <span class=nc>V</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=kt>bool</span> <span class=n>push_impl</span><span class=p>(</span><span class=n>V</span><span class=o>&amp;&amp;</span> <span class=n>value</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>count_</span> <span class=o>==</span> <span class=n>max_</span><span class=p>)</span> <span class=k>return</span> <span class=nb>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>alloc_traits</span><span class=o>::</span><span class=n>construct</span><span class=p>(</span><span class=n>alloc_</span><span class=p>(),</span> <span class=n>data_</span><span class=p>()</span> <span class=o>+</span> <span class=p>(</span><span class=n>first_</span><span class=o>+</span><span class=n>count_</span><span class=p>)</span><span class=o>%</span><span class=n>max_</span><span class=p>,</span> <span class=n>std</span><span class=o>::</span><span class=n>forward</span><span class=o>&lt;</span><span class=n>V</span><span class=o>&gt;</span><span class=p>(</span><span class=n>value</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>        <span class=o>++</span><span class=n>count_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nb>true</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>template</span><span class=o>&lt;</span><span class=k>class</span> <span class=nc>V</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=n>push_overwrite_impl</span><span class=p>(</span><span class=n>V</span><span class=o>&amp;&amp;</span> <span class=n>value</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>count_</span> <span class=o>==</span> <span class=n>max_</span><span class=p>)</span> <span class=n>pop</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=n>alloc_traits</span><span class=o>::</span><span class=n>construct</span><span class=p>(</span><span class=n>alloc_</span><span class=p>(),</span> <span class=n>data_</span><span class=p>()</span> <span class=o>+</span> <span class=p>(</span><span class=n>first_</span><span class=o>+</span><span class=n>count_</span><span class=p>)</span><span class=o>%</span><span class=n>max_</span><span class=p>,</span> <span class=n>std</span><span class=o>::</span><span class=n>forward</span><span class=o>&lt;</span><span class=n>V</span><span class=o>&gt;</span><span class=p>(</span><span class=n>value</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>        <span class=o>++</span><span class=n>count_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>public</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=kt>bool</span> <span class=n>push</span><span class=p>(</span><span class=k>const</span> <span class=n>T</span><span class=o>&amp;</span> <span class=n>value</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nf>push_impl</span><span class=p>(</span><span class=n>value</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=kt>bool</span> <span class=nf>push</span><span class=p>(</span><span class=n>T</span><span class=o>&amp;&amp;</span> <span class=n>value</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=n>push_impl</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>move</span><span class=p>(</span><span class=n>value</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=nf>push_overwrite</span><span class=p>(</span><span class=k>const</span> <span class=n>T</span><span class=o>&amp;</span> <span class=n>value</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=n>push_overwrite_impl</span><span class=p>(</span><span class=n>value</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=nf>push_overwrite</span><span class=p>(</span><span class=n>T</span><span class=o>&amp;&amp;</span> <span class=n>value</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=n>push_overwrite_impl</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>move</span><span class=p>(</span><span class=n>value</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>template</span> <span class=o>&lt;</span><span class=k>typename</span> <span class=p>...</span><span class=n>Args</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=k>auto</span><span class=o>&amp;</span> <span class=n>emplace</span><span class=p>(</span><span class=n>Args</span><span class=o>&amp;&amp;</span> <span class=p>...</span><span class=n>args</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>count_</span> <span class=o>==</span> <span class=n>max_</span><span class=p>)</span> <span class=n>pop</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=k>const</span> <span class=k>auto</span> <span class=n>ptr</span> <span class=o>=</span> <span class=n>data_</span><span class=p>()</span> <span class=o>+</span> <span class=p>(</span><span class=n>first_</span><span class=o>+</span><span class=n>count_</span><span class=p>)</span> <span class=o>%</span> <span class=n>max_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>alloc_traits</span><span class=o>::</span><span class=n>construct</span><span class=p>(</span><span class=n>alloc_</span><span class=p>(),</span> <span class=n>ptr</span><span class=p>,</span> <span class=n>std</span><span class=o>::</span><span class=n>forward</span><span class=o>&lt;</span><span class=n>Args</span><span class=o>&gt;</span><span class=p>(</span><span class=n>args</span><span class=p>)...);</span>
+</span></span><span class=line><span class=cl>        <span class=o>++</span><span class=n>count_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>*</span><span class=n>ptr</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=nf>pop</span><span class=p>()</span> <span class=k>noexcept</span> <span class=p>{</span> <span class=c1>// UB if empty
+</span></span></span><span class=line><span class=cl>        <span class=n>alloc_traits</span><span class=o>::</span><span class=n>destroy</span><span class=p>(</span><span class=n>alloc_</span><span class=p>(),</span> <span class=n>data_</span><span class=p>()</span><span class=o>+</span><span class=n>first_</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=n>first_</span> <span class=o>=</span> <span class=p>(</span><span class=n>first_</span><span class=o>+</span><span class=mi>1</span><span class=p>)</span> <span class=o>%</span> <span class=n>max_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=o>--</span><span class=n>count_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=nf>pop_back</span><span class=p>()</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>alloc_traits</span><span class=o>::</span><span class=n>destroy</span><span class=p>(</span><span class=n>alloc_</span><span class=p>(),</span> <span class=n>data_</span><span class=p>()</span> <span class=o>+</span> <span class=p>(</span><span class=n>first_</span><span class=o>+</span><span class=n>count_</span><span class=o>-</span><span class=mi>1</span><span class=p>)</span> <span class=o>%</span> <span class=n>max_</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=o>--</span><span class=n>count_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>const</span> <span class=k>auto</span><span class=o>&amp;</span> <span class=k>operator</span><span class=p>[](</span><span class=n>size_type</span> <span class=n>i</span><span class=p>)</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nf>data_</span><span class=p>()[(</span><span class=n>first_</span><span class=o>+</span><span class=n>i</span><span class=p>)</span> <span class=o>%</span> <span class=n>max_</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>auto</span><span class=o>&amp;</span> <span class=k>operator</span><span class=p>[](</span><span class=n>size_type</span> <span class=n>i</span><span class=p>)</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nf>data_</span><span class=p>()[(</span><span class=n>first_</span><span class=o>+</span><span class=n>i</span><span class=p>)</span> <span class=o>%</span> <span class=n>max_</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>auto</span><span class=o>&amp;</span> <span class=n>at</span><span class=p>(</span><span class=n>size_type</span> <span class=n>i</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>i</span> <span class=o>&gt;=</span> <span class=n>count_</span><span class=p>)</span> <span class=k>throw</span> <span class=n>std</span><span class=o>::</span><span class=n>out_of_range</span><span class=p>(</span><span class=s>&#34;RingBuffer subscription out of range&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=p>(</span><span class=o>*</span><span class=k>this</span><span class=p>)[</span><span class=n>i</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>auto</span><span class=o>&amp;</span> <span class=n>at</span><span class=p>(</span><span class=n>size_type</span> <span class=n>i</span><span class=p>)</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>i</span> <span class=o>&gt;=</span> <span class=n>count_</span><span class=p>)</span> <span class=k>throw</span> <span class=n>std</span><span class=o>::</span><span class=n>out_of_range</span><span class=p>(</span><span class=s>&#34;RingBuffer subscription out of range&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=p>(</span><span class=o>*</span><span class=k>this</span><span class=p>)[</span><span class=n>i</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>auto</span><span class=o>&amp;</span> <span class=n>front</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=p>(</span><span class=o>*</span><span class=k>this</span><span class=p>)[</span><span class=mi>0</span><span class=p>];</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>auto</span><span class=o>&amp;</span> <span class=n>front</span><span class=p>()</span>       <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=p>(</span><span class=o>*</span><span class=k>this</span><span class=p>)[</span><span class=mi>0</span><span class=p>];</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>auto</span><span class=o>&amp;</span> <span class=n>back</span><span class=p>()</span>  <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=p>(</span><span class=o>*</span><span class=k>this</span><span class=p>)[</span><span class=n>count_</span> <span class=o>-</span> <span class=mi>1</span><span class=p>];</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>auto</span><span class=o>&amp;</span> <span class=n>back</span><span class=p>()</span>        <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=p>(</span><span class=o>*</span><span class=k>this</span><span class=p>)[</span><span class=n>count_</span> <span class=o>-</span> <span class=mi>1</span><span class=p>];</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=kt>bool</span> <span class=nf>empty</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=n>count_</span> <span class=o>==</span> <span class=mi>0</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=n>size_type</span> <span class=nf>size</span><span class=p>()</span>     <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=n>count_</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=n>size_type</span> <span class=nf>capacity</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=n>max_</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=nf>clear</span><span class=p>()</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>for</span> <span class=p>(</span><span class=k>auto</span> <span class=n>i</span><span class=o>=</span><span class=n>first_</span><span class=p>;</span> <span class=n>i</span><span class=o>&lt;</span><span class=n>first_</span> <span class=o>+</span> <span class=n>count_</span><span class=p>;</span> <span class=o>++</span><span class=n>i</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=n>alloc_traits</span><span class=o>::</span><span class=n>destroy</span><span class=p>(</span><span class=n>alloc_</span><span class=p>(),</span> <span class=o>&amp;</span><span class=n>data_</span><span class=p>()[</span><span class=n>i</span> <span class=o>%</span> <span class=n>max_</span><span class=p>]);</span>
+</span></span><span class=line><span class=cl>            <span class=o>--</span><span class=n>count_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>private</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=n>CompressPair</span><span class=o>&lt;</span><span class=n>allocator_type</span><span class=p>,</span> <span class=n>T</span><span class=o>*&gt;</span> <span class=n>alloc_and_data_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>auto</span><span class=o>&amp;</span> <span class=n>alloc_</span><span class=p>()</span> <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=n>alloc_and_data_</span><span class=p>.</span><span class=n>first</span><span class=p>();</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>auto</span> <span class=nf>data_</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=n>alloc_and_data_</span><span class=p>.</span><span class=n>second</span><span class=p>();</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=n>size_type</span> <span class=n>first_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>size_type</span> <span class=n>count_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>size_type</span> <span class=n>max_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span></code></pre></td></tr></table></div></div><p><code>RingBuffer</code>的最大容量必须在构建时指定. 并且, 所有的动态内存分配也在构建时完成.
+此外用户也可以指定自定义的Allocator.</p><h2 id=空基类优化-empty-base-optimization>空基类优化 (Empty Base Optimization)</h2><p>众所周知, C++中, 一个空的struct一般情况下也要占用至少1字节的空间, 否则无法将它与前后的对象地址区分开 (不过, 对于C++20, 也可以直接使用<code>[[no_unique_address]]</code>, 省去空基类优化的技巧).
+但是, 对于某个对象内的基类对象, 如果基类为空, C++编译器可以选择使用空基类优化, 即, 去除基类对象的内存表示.</p><p>这个技巧在编译器STL实现的代码中经常可以看到, 一般是为了将容器的allocator和其它成员共同表示, 省去allocator为空时的额外空间占用,
+因为大部分情况下, 我们会使用默认allocator (即std::allocator), 或者仅依赖某些全局变量的allocator, 而这些allocator都是无状态的, 没有成员变量.</p><p>上面的实现中为了利用空基类优化, 使用了<code>CompressPair&lt;T1, T2></code>. 它的实现方法, 是通过类模版的偏特化, 分别处理<code>T1</code>为空和<code>T2</code>为空的情形.
+如果<code>T2</code>为空, 那么就以<code>T2</code>为基类. 否则默认以<code>T1</code>为基类. 如此便实现了对空类的"压缩".
+我写了一个简单的实现:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>template</span> <span class=o>&lt;</span><span class=k>typename</span> <span class=n>T1</span><span class=p>,</span> <span class=k>typename</span> <span class=n>T2</span><span class=p>,</span> <span class=k>typename</span> <span class=o>=</span> <span class=kt>void</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>CompressPair</span> <span class=o>:</span> <span class=k>protected</span> <span class=n>T1</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>T2</span> <span class=n>t2_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>public</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>U1</span> <span class=o>=</span> <span class=n>T1</span><span class=p>,</span> <span class=k>typename</span> <span class=n>U2</span> <span class=o>=</span> <span class=n>T2</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=n>CompressPair</span><span class=p>(</span><span class=n>U1</span><span class=o>&amp;&amp;</span> <span class=n>x</span><span class=p>,</span> <span class=n>U2</span><span class=o>&amp;&amp;</span> <span class=n>y</span><span class=p>)</span> <span class=o>:</span> <span class=n>T1</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>forward</span><span class=o>&lt;</span><span class=n>U1</span><span class=o>&gt;</span><span class=p>(</span><span class=n>x</span><span class=p>)),</span> <span class=n>t2_</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>forward</span><span class=o>&lt;</span><span class=n>U2</span><span class=o>&gt;</span><span class=p>(</span><span class=n>y</span><span class=p>))</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=n>T1</span><span class=o>&amp;</span> <span class=n>first</span><span class=p>()</span> <span class=k>noexcept</span>        <span class=p>{</span> <span class=k>return</span> <span class=o>*</span><span class=k>this</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=k>const</span> <span class=n>T1</span><span class=o>&amp;</span> <span class=n>first</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span>  <span class=p>{</span> <span class=k>return</span> <span class=o>*</span><span class=k>this</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=k>auto</span><span class=o>&amp;</span> <span class=n>second</span><span class=p>()</span> <span class=k>noexcept</span>       <span class=p>{</span> <span class=k>return</span> <span class=n>t2_</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=k>auto</span><span class=o>&amp;</span> <span class=n>second</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=n>t2_</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>template</span> <span class=o>&lt;</span><span class=k>typename</span> <span class=n>T1</span><span class=p>,</span> <span class=k>typename</span> <span class=n>T2</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>CompressPair</span><span class=o>&lt;</span><span class=n>T1</span><span class=p>,</span> <span class=n>T2</span><span class=p>,</span> <span class=n>std</span><span class=o>::</span><span class=n>enable_if_t</span><span class=o>&lt;</span><span class=n>std</span><span class=o>::</span><span class=n>is_empty_v</span><span class=o>&lt;</span><span class=n>T2</span><span class=o>&gt;&gt;&gt;</span> <span class=o>:</span> <span class=k>protected</span> <span class=n>T2</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>T1</span> <span class=n>t1_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>public</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>U1</span> <span class=o>=</span> <span class=n>T1</span><span class=p>,</span> <span class=k>typename</span> <span class=n>U2</span> <span class=o>=</span> <span class=n>T2</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=n>CompressPair</span><span class=p>(</span><span class=n>U1</span><span class=o>&amp;&amp;</span> <span class=n>x</span><span class=p>,</span> <span class=n>U2</span><span class=o>&amp;&amp;</span> <span class=n>y</span><span class=p>)</span> <span class=o>:</span> <span class=n>T2</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>forward</span><span class=o>&lt;</span><span class=n>U2</span><span class=o>&gt;</span><span class=p>(</span><span class=n>y</span><span class=p>)),</span> <span class=n>t1_</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>forward</span><span class=o>&lt;</span><span class=n>U1</span><span class=o>&gt;</span><span class=p>(</span><span class=n>x</span><span class=p>))</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=k>auto</span><span class=o>&amp;</span> <span class=n>first</span><span class=p>()</span> <span class=k>noexcept</span>        <span class=p>{</span> <span class=k>return</span> <span class=n>t1_</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=k>auto</span><span class=o>&amp;</span> <span class=n>first</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span>  <span class=p>{</span> <span class=k>return</span> <span class=n>t1_</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=n>T2</span><span class=o>&amp;</span> <span class=n>second</span><span class=p>()</span> <span class=k>noexcept</span>       <span class=p>{</span> <span class=k>return</span> <span class=o>*</span><span class=k>this</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=k>const</span> <span class=n>T2</span><span class=o>&amp;</span> <span class=n>second</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=o>*</span><span class=k>this</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span></code></pre></td></tr></table></div></div><p>实例化<code>CompressPair</code>时, 会自动匹配合适的类模版. 此后可通过<code>first()</code>和<code>second()</code>访问储存的两个对象.
+和普通的<code>std::pair</code>不同, 这里的<code>first()</code>和<code>second()</code>只能写成成员函数, 返回相应的引用.</p><p>在<code>RingBuffer</code>中, <code>CompressPair</code>用于存储allocator和data指针.</p><h2 id=allocator的使用>allocator的使用</h2><p>可以看到, <code>RingBuffer</code>中, 我们总是通过<code>allocator_traits</code>去调用实际的allocator, 而不是直接调用allocator的成员.
+因为<code>allocator_traits</code>能够基于用户提供的allocator类, 自动提供默认实现. 否则, 用户提供的allocator需要实现所有要求的成员函数等, 即使我们只需要自定义内存分配/释放的操作.</p><p>事实上, STL中需要动态分配内存的容器都是<a class=link href=https://en.cppreference.com/w/cpp/named_req/AllocatorAwareContainer target=_blank rel=noopener><em><code>AllocatorAwareContainer</code></em></a>, 规定必须使用<code>allocator_traits</code>.</p><p>此外, C++17开始, <code>std::allocator</code>的<code>allocate</code>, <code>construct</code>成员函数已经是deprecated.</p><h3 id=内存分配与对象构建>内存分配与对象构建</h3><p>众所周知, 一般情况下C++中的对象并不是简单的一串字节, 不能假装某处已分配的内存上有一个对象, 然后去访问它 (隐式构建的对象是例外).
+构建对象和分配内存是分开的两种操作, 对于新手来说, 在编写容器类的实现时很容易体会到这一点.
+而一些STL容器的实现中, 将两者解耦是必须的, 例如<code>std::vector</code>.</p><p>上面的实现中, <code>RingBuffer</code>仅在构建时一次性分配所需内存. 对于默认的<code>std::allocator</code>, 其行为是用<code>operator new</code>, 分配所需长度的内存. 此时<code>RingBuffer</code>中没有任何对象.
+之后, 添加对象时, 我们转发参数给<code>T</code>的构建函数, 在合适的地点<em>就地</em>构建新对象 (一般是使用placement new).
+如果需要销毁某个对象, 我们通过<code>allocator_traits</code>执行析构, 结束对象的生命周期.</p><p>在整个过程中, 内存分配和释放仅在<code>RingBuffer</code>构建和析构时发生. 此外, 操作<code>RingBuffer</code>也不会移动其中的对象.</p><h2 id=move操作>Move操作</h2><p>显而易见, <code>RingBuffer</code>是一个直接管理非RAII资源的类 (因为我们把数据用裸指针表示). 根据<a class=link href=https://en.cppreference.com/w/cpp/language/rule_of_three target=_blank rel=noopener>0/3/5规则</a>,
+我们应当给它定义析构函数, 以正确释放资源. 此外, 拷贝操作理应禁止, 或者实现深拷贝. Move操作则是最好能提供.</p><p>这里我们只给<code>RingBuffer</code>实现了Move. 注意Move的手动定义会删除编译器隐式定义的Copy操作, 因此<code>RingBuffer</code>无法被Copy.</p><p>在Move操作中, 我们把右端的<code>CompressPair</code>成员直接Move过来. 这里如果allocator有自己的Move操作, 也会被利用. 其它成员直接拷贝即可.
+右端被Move后, 我们需要将它置为空值, 至少得避免它析构时出现double-free之类的错误.</p><p>可以看出, 在这个实现中, 被Move后的<code>RingBuffer</code>是无法再被使用的, 最大容量是0.</p><h2 id=左值与右值引用的重载>左值与右值引用的重载</h2><p><code>push_impl</code>这个helper函数是为了给<code>push</code>使用, 减少代码重复. 众所周知, <code>std::vector</code>等容器的<code>push</code>函数有两个重载, 分别接收左值和右值.
+他们的逻辑是一样的, 只是一个转发左值, 一个转发右值.
+为了避免这类导致重复的情况, 我们定义一个接收forwarding reference的<code>push_impl</code>, 将两个重载统一转发给它. <code>push_impl</code>内部实现了<code>push</code>的真正逻辑, 且将参数完美转发.
+由于<code>push_impl</code>仅会内部使用, 不用考虑类型不对的情况.</p><p>这是一种减少左值/右值重载代码重复的常见方法. 对于较长, 逻辑复杂的函数更有用.</p><h1 id=未完成的部分>未完成的部分</h1><ul><li>Copy操作. 由于我们定义了Move操作, 默认的Copy操作会被删除.
+Copy的实现只需把成员进行拷贝, 其中对<code>data_</code>部分特殊处理(深拷贝)即可.
+当然, 能Copy的前提是, allocator是可Copy的. 对于allocator的Copy, 我们可以直接利用<code>std::allocator_traits&lt;Alloc>::select_on_container_copy_construction</code>.</li><li>更改最大容量, 以及按需分配内存. 更改最大容量相对容易实现一些, Move后不能扩容的问题也能一并解决. 但按需分配内存可能会引起性能问题 (在容器被填满之前).</li><li>Iterator. 这里没法偷懒用<code>T*</code>作为iterator类型, 因为这不是一个连续容器. 因此, 我们的iterator需要记录一些额外信息, 才能正确地从头到尾遍历.</li><li>其它STL容器的Requirement. 简洁起见, 这里并没有实现STL容器的所有Requirement, 有一些函数的signature也并不一致.</li></ul></section><footer class=article-footer><section class=article-tags><a href=/tags/c++/>C++</a>
+<a href=/tags/container/>Container</a></section><section class=article-copyright><svg class="icon icon-tabler icon-tabler-copyright" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="12" cy="12" r="9"/><path d="M14.5 9a3.5 4 0 100 6"/></svg>
+<span>Licensed under CC BY-NC-SA 4.0</span></section></footer></article><div class=disqus-container></div><style>.disqus-container{background-color:var(--card-background);border-radius:var(--card-border-radius);box-shadow:var(--shadow-l1);padding:var(--card-padding)}</style><script>window.addEventListener("onColorSchemeChange",e=>{typeof DISQUS=="object"&&DISQUS.reset({reload:!0})})</script><footer class=site-footer><section class=copyright>&copy;
+2020 -
+2026 Kya's Blog</section><section class=powerby>Built with <a href=https://gohugo.io/ target=_blank rel=noopener>Hugo</a><br>Theme <b><a href=https://github.com/CaiJimmy/hugo-theme-stack target=_blank rel=noopener data-version=3.31.0>Stack</a></b> designed by <a href=https://jimmycai.com target=_blank rel=noopener>Jimmy</a></section></footer><div class=pswp tabindex=-1 role=dialog aria-hidden=true><div class=pswp__bg></div><div class=pswp__scroll-wrap><div class=pswp__container><div class=pswp__item></div><div class=pswp__item></div><div class=pswp__item></div></div><div class="pswp__ui pswp__ui--hidden"><div class=pswp__top-bar><div class=pswp__counter></div><button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+<button class="pswp__button pswp__button--share" title=Share></button>
+<button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+<button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button><div class=pswp__preloader><div class=pswp__preloader__icn><div class=pswp__preloader__cut><div class=pswp__preloader__donut></div></div></div></div></div><div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap"><div class=pswp__share-tooltip></div></div><button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+</button>
+<button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)"></button><div class=pswp__caption><div class=pswp__caption__center></div></div></div></div></div><script src=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js integrity="sha256-ePwmChbbvXbsO02lbM3HoHbSHTHFAeChekF1xKJdleo=" crossorigin=anonymous defer></script><script src=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js integrity="sha256-UKkzOn/w1mBxRmLLGrSeyB4e1xbrp4xylgAWb3M42pU=" crossorigin=anonymous defer></script><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.min.css crossorigin=anonymous><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.css crossorigin=anonymous></main></div><script src=https://cdn.jsdelivr.net/npm/node-vibrant@3.1.6/dist/vibrant.min.js integrity="sha256-awcR2jno4kI5X0zL8ex0vi2z+KMkF24hUW8WePSA9HM=" crossorigin=anonymous></script><script type=text/javascript src=/ts/main.1e9a3bafd846ced4c345d084b355fb8c7bae75701c338f8a1f8a82c780137826.js defer></script><script>(function(){const e=document.createElement("link");e.href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap",e.type="text/css",e.rel="stylesheet",document.head.appendChild(e)})()</script></body></html>

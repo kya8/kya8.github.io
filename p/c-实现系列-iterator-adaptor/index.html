@@ -1,0 +1,419 @@
+<!doctype html><html lang=en-us dir=ltr><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><meta name=description content='前言 C++20开始, 标准库中提供了ranges模块, 其核心就是各种iterator adaptor, 通过它们的灵活组合, 变换, 能够以简练清晰的代码实现相当复杂的遍历逻辑, 并且没有额外性能开销. 与它们对应的就是Rust的std::iter, 或是Python的itertools.\n这篇文章会通过对几个iterator adaptor / range的简单实现, 浅窥iterator adaptor的背后思想和一些实现细节.\nC++ Iterator和Range C++中的Iterator相当灵活, 但也比较繁琐. 简单来说, 我们把能够用于range-for的对象称为是一个range, 也就是说能从这个对象上调用begin(), end()等函数, 获取一对迭代器, 然后用这组迭代器进行一一遍历. 而具体的迭代逻辑, 就由operator++, operator*等实现. end()获取的iterator, 仅是一个sentinel值, 用于区分迭代是否应当结束.\n这个从range对象取出一对iterator的逻辑, 刚接触时会有点别扭. 我们若是要自己实现一个range(不管是对其它range的一个adaptor还是自己生成), 就需要实现一个range类, 包含遍历所需的所有信息, 并能够生成begin和end两个起止的iterator. 这两个iterator一般也需要一个单独的类, 记录迭代时的状态信息等.\nenumerate 我们从比较简单的enumerate开始. 这个iterator adaptor会在输入的iterator的基础上, 返回一个std::pair的range, 包含每个元素的序号和内容(引用原range的目标).\n这里直接给出代码:\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 namespace details { template <typename T, typename = std::void_t<decltype(std::begin(std::declval<T&>())), decltype(std::end(std::declval<T&>()))>> constexpr auto enumerate(T&& t) { using IterT = decltype(std::begin(std::declval<T&>())); using IterTraits = std::iterator_traits<IterT>; struct EnumerateIterator { typename IterTraits::difference_type index_; IterT it_; auto operator*() const { // This returns a temporary value, not by reference. return std::pair<decltype(index_), decltype(*it_)>{index_, *it_}; } bool operator==(const EnumerateIterator& rhs) const { return it_ == rhs.it_; } bool operator!=(const EnumerateIterator& rhs) const { return it_ != rhs.it_; } auto& operator++() { ++index_; ++it_; return *this; } }; struct EnumerateIterableProxy { T t_; // rvalue t will be moved in. // Cannot use T&& here, since "a temporary bound to a reference parameter in a function call exists until the end of the full expression containing that function call", // so enumerate(rvalue_here()) won&#39;t work as expected. EnumerateIterator begin() { return {0, std::begin(t_)}; } EnumerateIterator end() { return {-1, std::end(t_)}; } }; return EnumerateIterableProxy{std::forward<T>(t)}; } } // namespace details template <typename T> constexpr auto enumerate(T&& t) { return details::enumerate(std::forward<T>(t)); } 这里的enumerate是用函数的形式实现, 返回了函数内部所定义的一个类EnumerateIterableProxy. 在函数外部, 用户不能创建这个类, 但仍可以正常访问这个类的成员.\n'><title>C++实现系列: Iterator adaptor</title><link rel=canonical href=https://kya8.github.io/p/c-%E5%AE%9E%E7%8E%B0%E7%B3%BB%E5%88%97-iterator-adaptor/><link rel=stylesheet href=/scss/style.min.8659d82dbe8d0fe183ef22445ed42765c7d1d996ae5b4a02725eda69426286da.css><meta property='og:title' content="C++实现系列: Iterator adaptor"><meta property='og:description' content='前言 C++20开始, 标准库中提供了ranges模块, 其核心就是各种iterator adaptor, 通过它们的灵活组合, 变换, 能够以简练清晰的代码实现相当复杂的遍历逻辑, 并且没有额外性能开销. 与它们对应的就是Rust的std::iter, 或是Python的itertools.\n这篇文章会通过对几个iterator adaptor / range的简单实现, 浅窥iterator adaptor的背后思想和一些实现细节.\nC++ Iterator和Range C++中的Iterator相当灵活, 但也比较繁琐. 简单来说, 我们把能够用于range-for的对象称为是一个range, 也就是说能从这个对象上调用begin(), end()等函数, 获取一对迭代器, 然后用这组迭代器进行一一遍历. 而具体的迭代逻辑, 就由operator++, operator*等实现. end()获取的iterator, 仅是一个sentinel值, 用于区分迭代是否应当结束.\n这个从range对象取出一对iterator的逻辑, 刚接触时会有点别扭. 我们若是要自己实现一个range(不管是对其它range的一个adaptor还是自己生成), 就需要实现一个range类, 包含遍历所需的所有信息, 并能够生成begin和end两个起止的iterator. 这两个iterator一般也需要一个单独的类, 记录迭代时的状态信息等.\nenumerate 我们从比较简单的enumerate开始. 这个iterator adaptor会在输入的iterator的基础上, 返回一个std::pair的range, 包含每个元素的序号和内容(引用原range的目标).\n这里直接给出代码:\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 namespace details { template <typename T, typename = std::void_t<decltype(std::begin(std::declval<T&>())), decltype(std::end(std::declval<T&>()))>> constexpr auto enumerate(T&& t) { using IterT = decltype(std::begin(std::declval<T&>())); using IterTraits = std::iterator_traits<IterT>; struct EnumerateIterator { typename IterTraits::difference_type index_; IterT it_; auto operator*() const { // This returns a temporary value, not by reference. return std::pair<decltype(index_), decltype(*it_)>{index_, *it_}; } bool operator==(const EnumerateIterator& rhs) const { return it_ == rhs.it_; } bool operator!=(const EnumerateIterator& rhs) const { return it_ != rhs.it_; } auto& operator++() { ++index_; ++it_; return *this; } }; struct EnumerateIterableProxy { T t_; // rvalue t will be moved in. // Cannot use T&& here, since "a temporary bound to a reference parameter in a function call exists until the end of the full expression containing that function call", // so enumerate(rvalue_here()) won&#39;t work as expected. EnumerateIterator begin() { return {0, std::begin(t_)}; } EnumerateIterator end() { return {-1, std::end(t_)}; } }; return EnumerateIterableProxy{std::forward<T>(t)}; } } // namespace details template <typename T> constexpr auto enumerate(T&& t) { return details::enumerate(std::forward<T>(t)); } 这里的enumerate是用函数的形式实现, 返回了函数内部所定义的一个类EnumerateIterableProxy. 在函数外部, 用户不能创建这个类, 但仍可以正常访问这个类的成员.\n'><meta property='og:url' content='https://kya8.github.io/p/c-%E5%AE%9E%E7%8E%B0%E7%B3%BB%E5%88%97-iterator-adaptor/'><meta property='og:site_name' content="Kya's Blog"><meta property='og:type' content='article'><meta property='article:section' content='Post'><meta property='article:tag' content='c++'><meta property='article:tag' content='iterator'><meta property='article:tag' content='template metaprogramming'><meta property='article:published_time' content='2024-01-29T00:00:00+00:00'><meta property='article:modified_time' content='2024-01-29T00:00:00+00:00'><meta name=twitter:title content="C++实现系列: Iterator adaptor"><meta name=twitter:description content='前言 C++20开始, 标准库中提供了ranges模块, 其核心就是各种iterator adaptor, 通过它们的灵活组合, 变换, 能够以简练清晰的代码实现相当复杂的遍历逻辑, 并且没有额外性能开销. 与它们对应的就是Rust的std::iter, 或是Python的itertools.\n这篇文章会通过对几个iterator adaptor / range的简单实现, 浅窥iterator adaptor的背后思想和一些实现细节.\nC++ Iterator和Range C++中的Iterator相当灵活, 但也比较繁琐. 简单来说, 我们把能够用于range-for的对象称为是一个range, 也就是说能从这个对象上调用begin(), end()等函数, 获取一对迭代器, 然后用这组迭代器进行一一遍历. 而具体的迭代逻辑, 就由operator++, operator*等实现. end()获取的iterator, 仅是一个sentinel值, 用于区分迭代是否应当结束.\n这个从range对象取出一对iterator的逻辑, 刚接触时会有点别扭. 我们若是要自己实现一个range(不管是对其它range的一个adaptor还是自己生成), 就需要实现一个range类, 包含遍历所需的所有信息, 并能够生成begin和end两个起止的iterator. 这两个iterator一般也需要一个单独的类, 记录迭代时的状态信息等.\nenumerate 我们从比较简单的enumerate开始. 这个iterator adaptor会在输入的iterator的基础上, 返回一个std::pair的range, 包含每个元素的序号和内容(引用原range的目标).\n这里直接给出代码:\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 namespace details { template <typename T, typename = std::void_t<decltype(std::begin(std::declval<T&>())), decltype(std::end(std::declval<T&>()))>> constexpr auto enumerate(T&& t) { using IterT = decltype(std::begin(std::declval<T&>())); using IterTraits = std::iterator_traits<IterT>; struct EnumerateIterator { typename IterTraits::difference_type index_; IterT it_; auto operator*() const { // This returns a temporary value, not by reference. return std::pair<decltype(index_), decltype(*it_)>{index_, *it_}; } bool operator==(const EnumerateIterator& rhs) const { return it_ == rhs.it_; } bool operator!=(const EnumerateIterator& rhs) const { return it_ != rhs.it_; } auto& operator++() { ++index_; ++it_; return *this; } }; struct EnumerateIterableProxy { T t_; // rvalue t will be moved in. // Cannot use T&& here, since "a temporary bound to a reference parameter in a function call exists until the end of the full expression containing that function call", // so enumerate(rvalue_here()) won&#39;t work as expected. EnumerateIterator begin() { return {0, std::begin(t_)}; } EnumerateIterator end() { return {-1, std::end(t_)}; } }; return EnumerateIterableProxy{std::forward<T>(t)}; } } // namespace details template <typename T> constexpr auto enumerate(T&& t) { return details::enumerate(std::forward<T>(t)); } 这里的enumerate是用函数的形式实现, 返回了函数内部所定义的一个类EnumerateIterableProxy. 在函数外部, 用户不能创建这个类, 但仍可以正常访问这个类的成员.\n'></head><body class=article-page><script>(function(){const e="StackColorScheme";localStorage.getItem(e)||localStorage.setItem(e,"auto")})()</script><script>(function(){const t="StackColorScheme",e=localStorage.getItem(t),n=window.matchMedia("(prefers-color-scheme: dark)").matches===!0;e=="dark"||e==="auto"&&n?document.documentElement.dataset.scheme="dark":document.documentElement.dataset.scheme="light"})()</script><div class="container main-container flex on-phone--column extended"><aside class="sidebar left-sidebar sticky"><button class="hamburger hamburger--spin" type=button id=toggle-menu aria-label="Toggle Menu">
+<span class=hamburger-box><span class=hamburger-inner></span></span></button><header><div class=site-meta><h1 class=site-name><a href=/>Kya's Blog</a></h1><h2 class=site-description></h2></div></header><ol class=menu-social><li><a href=https://github.com/kya8 target=_blank title=GitHub rel=me><svg class="icon icon-tabler icon-tabler-brand-github" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6.0 00-1.3-3.2 4.2 4.2.0 00-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3.0 00-6.2.0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2.0 00-.1 3.2A4.6 4.6.0 004 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg></a></li></ol><ol class=menu id=main-menu><li><a href=/><svg class="icon icon-tabler icon-tabler-home" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><polyline points="5 12 3 12 12 3 21 12 19 12"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/><path d="M9 21v-6a2 2 0 012-2h2a2 2 0 012 2v6"/></svg>
+<span>Home</span></a></li><li><a href=/archives/><svg class="icon icon-tabler icon-tabler-archive" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><rect x="3" y="4" width="18" height="4" rx="2"/><path d="M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+<span>Archives</span></a></li><li><a href=/search/><svg class="icon icon-tabler icon-tabler-search" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15" y2="15"/></svg>
+<span>Search</span></a></li><li class=menu-bottom-section><ol class=menu><li id=dark-mode-toggle><svg class="icon icon-tabler icon-tabler-toggle-left" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="8" cy="12" r="2"/><rect x="2" y="6" width="20" height="12" rx="6"/></svg>
+<svg class="icon icon-tabler icon-tabler-toggle-right" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="16" cy="12" r="2"/><rect x="2" y="6" width="20" height="12" rx="6"/></svg>
+<span>Dark Mode</span></li></ol></li></ol></aside><aside class="sidebar right-sidebar sticky"><section class="widget archives"><div class=widget-icon><svg class="icon icon-tabler icon-tabler-hash" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><line x1="5" y1="9" x2="19" y2="9"/><line x1="5" y1="15" x2="19" y2="15"/><line x1="11" y1="4" x2="7" y2="20"/><line x1="17" y1="4" x2="13" y2="20"/></svg></div><h2 class="widget-title section-title">Table of contents</h2><div class=widget--toc><nav id=TableOfContents><ol><li><a href=#前言>前言</a></li><li><a href=#c-iterator和range>C++ Iterator和Range</a></li><li><a href=#enumerate>enumerate</a><ol><li><a href=#iterator_traits>iterator_traits</a></li><li><a href=#使用例>使用例</a></li></ol></li><li><a href=#zip>zip</a><ol><li><a href=#使用例-1>使用例</a></li></ol></li><li><a href=#ndindex>NdIndex</a><ol><li><a href=#递增>递增</a></li><li><a href=#改进>改进</a></li></ol></li><li><a href=#总结>总结</a><ol><li><a href=#adaptor组合>adaptor组合</a></li></ol></li></ol></nav></div></section></aside><main class="main full-width"><article class=main-article><header class=article-header><div class=article-details><div class=article-title-wrapper><h2 class=article-title><a href=/p/c-%E5%AE%9E%E7%8E%B0%E7%B3%BB%E5%88%97-iterator-adaptor/>C++实现系列: Iterator adaptor</a></h2></div><footer class=article-time><div><svg class="icon icon-tabler icon-tabler-calendar-time" width="56" height="56" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><path d="M11.795 21H5a2 2 0 01-2-2V7a2 2 0 012-2h12a2 2 0 012 2v4"/><circle cx="18" cy="18" r="4"/><path d="M15 3v4"/><path d="M7 3v4"/><path d="M3 11h16"/><path d="M18 16.496V18l1 1"/></svg>
+<time class=article-time--published>Jan 29, 2024</time></div><div><svg class="icon icon-tabler icon-tabler-clock" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+<time class=article-time--reading>6 minute read</time></div></footer></div></header><section class=article-content><h1 id=前言>前言</h1><p>C++20开始, 标准库中提供了<code>ranges</code>模块, 其核心就是各种iterator adaptor, 通过它们的灵活组合, 变换, 能够以简练清晰的代码实现相当复杂的遍历逻辑, 并且没有额外性能开销. 与它们对应的就是Rust的<code>std::iter</code>, 或是Python的<code>itertools</code>.</p><p>这篇文章会通过对几个iterator adaptor / range的简单实现, 浅窥iterator adaptor的背后思想和一些实现细节.</p><h1 id=c-iterator和range>C++ Iterator和Range</h1><p>C++中的Iterator相当灵活, 但也比较繁琐. 简单来说, 我们把能够用于range-for的对象称为是一个range, 也就是说能从这个对象上调用<code>begin()</code>, <code>end()</code>等函数, 获取一对迭代器, 然后用这组迭代器进行一一遍历. 而具体的迭代逻辑, 就由<code>operator++, operator*</code>等实现.
+<code>end()</code>获取的iterator, 仅是一个sentinel值, 用于区分迭代是否应当结束.</p><p>这个从range对象取出一对iterator的逻辑, 刚接触时会有点别扭. 我们若是要自己实现一个range(不管是对其它range的一个adaptor还是自己生成), 就需要实现一个range类, 包含遍历所需的所有信息, 并能够生成<code>begin</code>和<code>end</code>两个起止的iterator. 这两个iterator一般也需要一个单独的类, 记录迭代时的状态信息等.</p><h1 id=enumerate>enumerate</h1><p>我们从比较简单的enumerate开始. 这个iterator adaptor会在输入的iterator的基础上, 返回一个<code>std::pair</code>的range, 包含每个元素的序号和内容(引用原range的目标).</p><p>这里直接给出代码:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>namespace</span> <span class=n>details</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>template</span> <span class=o>&lt;</span><span class=k>typename</span> <span class=n>T</span><span class=p>,</span> <span class=k>typename</span> <span class=o>=</span> <span class=n>std</span><span class=o>::</span><span class=n>void_t</span><span class=o>&lt;</span><span class=k>decltype</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>begin</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>declval</span><span class=o>&lt;</span><span class=n>T</span><span class=o>&amp;&gt;</span><span class=p>())),</span> <span class=k>decltype</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>end</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>declval</span><span class=o>&lt;</span><span class=n>T</span><span class=o>&amp;&gt;</span><span class=p>()))</span><span class=o>&gt;&gt;</span>
+</span></span><span class=line><span class=cl><span class=k>constexpr</span> <span class=k>auto</span> <span class=n>enumerate</span><span class=p>(</span><span class=n>T</span><span class=o>&amp;&amp;</span> <span class=n>t</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>using</span> <span class=n>IterT</span> <span class=o>=</span> <span class=k>decltype</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>begin</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>declval</span><span class=o>&lt;</span><span class=n>T</span><span class=o>&amp;&gt;</span><span class=p>()));</span>
+</span></span><span class=line><span class=cl>    <span class=k>using</span> <span class=n>IterTraits</span> <span class=o>=</span> <span class=n>std</span><span class=o>::</span><span class=n>iterator_traits</span><span class=o>&lt;</span><span class=n>IterT</span><span class=o>&gt;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>struct</span> <span class=nc>EnumerateIterator</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>typename</span> <span class=n>IterTraits</span><span class=o>::</span><span class=n>difference_type</span> <span class=n>index_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>IterT</span> <span class=n>it_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>auto</span> <span class=k>operator</span><span class=o>*</span><span class=p>()</span> <span class=k>const</span> <span class=p>{</span> <span class=c1>// This returns a temporary value, not by reference.
+</span></span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=n>std</span><span class=o>::</span><span class=n>pair</span><span class=o>&lt;</span><span class=k>decltype</span><span class=p>(</span><span class=n>index_</span><span class=p>),</span> <span class=k>decltype</span><span class=p>(</span><span class=o>*</span><span class=n>it_</span><span class=p>)</span><span class=o>&gt;</span><span class=p>{</span><span class=n>index_</span><span class=p>,</span> <span class=o>*</span><span class=n>it_</span><span class=p>};</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=kt>bool</span> <span class=k>operator</span><span class=o>==</span><span class=p>(</span><span class=k>const</span> <span class=n>EnumerateIterator</span><span class=o>&amp;</span> <span class=n>rhs</span><span class=p>)</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=n>it_</span> <span class=o>==</span> <span class=n>rhs</span><span class=p>.</span><span class=n>it_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=kt>bool</span> <span class=k>operator</span><span class=o>!=</span><span class=p>(</span><span class=k>const</span> <span class=n>EnumerateIterator</span><span class=o>&amp;</span> <span class=n>rhs</span><span class=p>)</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=n>it_</span> <span class=o>!=</span> <span class=n>rhs</span><span class=p>.</span><span class=n>it_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=k>auto</span><span class=o>&amp;</span> <span class=k>operator</span><span class=o>++</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=o>++</span><span class=n>index_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=o>++</span><span class=n>it_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=o>*</span><span class=k>this</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>};</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>struct</span> <span class=nc>EnumerateIterableProxy</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>T</span> <span class=n>t_</span><span class=p>;</span> <span class=c1>// rvalue t will be moved in.
+</span></span></span><span class=line><span class=cl>              <span class=c1>// Cannot use T&amp;&amp; here, since &#34;a temporary bound to a reference parameter in a function call exists until the end of the full expression containing that function call&#34;,
+</span></span></span><span class=line><span class=cl>              <span class=c1>// so enumerate(rvalue_here()) won&#39;t work as expected.
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=n>EnumerateIterator</span> <span class=nf>begin</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=p>{</span><span class=mi>0</span><span class=p>,</span> <span class=n>std</span><span class=o>::</span><span class=n>begin</span><span class=p>(</span><span class=n>t_</span><span class=p>)};</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=n>EnumerateIterator</span> <span class=nf>end</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=p>{</span><span class=o>-</span><span class=mi>1</span><span class=p>,</span> <span class=n>std</span><span class=o>::</span><span class=n>end</span><span class=p>(</span><span class=n>t_</span><span class=p>)};</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>};</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>EnumerateIterableProxy</span><span class=p>{</span><span class=n>std</span><span class=o>::</span><span class=n>forward</span><span class=o>&lt;</span><span class=n>T</span><span class=o>&gt;</span><span class=p>(</span><span class=n>t</span><span class=p>)};</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=p>}</span> <span class=c1>// namespace details
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>template</span> <span class=o>&lt;</span><span class=k>typename</span> <span class=n>T</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=k>constexpr</span> <span class=k>auto</span> <span class=n>enumerate</span><span class=p>(</span><span class=n>T</span><span class=o>&amp;&amp;</span> <span class=n>t</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>details</span><span class=o>::</span><span class=n>enumerate</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>forward</span><span class=o>&lt;</span><span class=n>T</span><span class=o>&gt;</span><span class=p>(</span><span class=n>t</span><span class=p>));</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>这里的<code>enumerate</code>是用函数的形式实现, 返回了函数内部所定义的一个类<code>EnumerateIterableProxy</code>.
+在函数外部, 用户不能创建这个类, 但仍可以正常访问这个类的成员.</p><p>我们把外部的<code>enumerate</code>转发到了<code>details</code>命名空间下的一个内部实现函数, 主要是为了让外部函数的模版参数不带有额外参数.
+<code>details::enumerate</code>在模版参数上, 通过检查参数类型<code>T</code>是否具有需要的<code>begin</code>和<code>end</code>, 限制了输入<code>T</code>的类型. (这里用了C++17的<code>std::void_t</code>)</p><p><code>std::declval&lt;T&></code>中加了一个左值引用: 因为如果函数接收的是右值, 那么<code>std::declval&lt;T>()</code>会返回一个右值引用, 其本身是一个右值. 而<code>std::begin</code>不允许右值参数.
+因此我们强制确保它是左值.</p><p>最终返回的<code>EnumerateIterableProxy</code>对象是直接由输入的<code>T&& t</code>构建, 不难看出, 经过完美转发后, <code>EnumerateIterableProxy</code>中的成员<code>t_</code>要么直接通过move, 将<code>t</code>转移至<code>EnumerateIterableProxy</code>内部的值类型, 要么成为一个对<code>t</code>的左值引用. 前者是接收右值的情况, 后者是接收左值. 没错, 如果是左值我们就引用它, 如果是右值我们就直接把它搬进来, 把所有权交给<code>EnumerateIterableProxy</code>.
+<code>EnumerateIterableProxy</code>引用或占有<code>t</code>后, 由它产生的iterator就能安全的引用<code>t</code>中的元素.</p><p>具体的enumerate逻辑位于<code>EnumerateIterator</code>之中. <code>EnumerateIterator</code>持有两个成员: 序号和当前的原range的iterator. 递增时, 序号和原iterator一起递增. 比较操作就是比较原iterator. 由于<code>EnumerateIterableProxy</code>给出的end iterator持有原先的end, 因此<code>EnumerateIterator</code>会随着原range一起终止.</p><p><code>EnumerateIterator</code>的解引用操作是把序号和对相应元素的引用, 装进<code>pair</code>里返回. 注意这里是<strong>按值</strong>返回, 和常见的iterator的<code>operator*()</code>按引用返回不同.
+这里给出<a class=link href=https://en.cppreference.com/w/cpp/named_req/InputIterator target=_blank rel=noopener>cppreference</a>上的一段说明:</p><blockquote><p>For an input iterator <code>X</code> that is not a <em>LegacyForwardIterator</em>, <code>std::iterator_traits&lt;X>::reference</code> does not have to be a reference type: dereferencing an input iterator may return a proxy object or <code>std::iterator_traits&lt;X>::value_type</code> itself by value (as in the case of <code>std::istreambuf_iterator</code>).
+对于仅满足Input Iterator的iterator, <code>operator*()</code>可以按值返回.</p></blockquote><h2 id=iterator_traits>iterator_traits</h2><p>这里利用了<code>std::iterator_traits</code>, 主要是为了能自动支持普通数组, 例如string literal.</p><h2 id=使用例>使用例</h2><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>for</span> <span class=p>(</span><span class=k>auto</span><span class=o>&amp;&amp;</span> <span class=p>[</span><span class=n>i</span><span class=p>,</span> <span class=n>c</span><span class=p>]</span> <span class=o>:</span> <span class=n>enumerate</span><span class=p>(</span><span class=s>&#34;Hello!&#34;</span><span class=p>))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>std</span><span class=o>::</span><span class=n>cout</span> <span class=o>&lt;&lt;</span> <span class=n>i</span> <span class=o>&lt;&lt;</span> <span class=s>&#34;: &#34;</span> <span class=o>&lt;&lt;</span> <span class=p>(</span><span class=n>c</span><span class=o>?</span> <span class=nl>c</span> <span class=p>:</span> <span class=sc>&#39;%&#39;</span><span class=p>)</span> <span class=o>&lt;&lt;</span> <span class=sc>&#39;\n&#39;</span><span class=p>;</span> <span class=c1>// % indicates NUL
+</span></span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>运行结果:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-fallback data-lang=fallback><span class=line><span class=cl>0: H
+</span></span><span class=line><span class=cl>1: e
+</span></span><span class=line><span class=cl>2: l
+</span></span><span class=line><span class=cl>3: l
+</span></span><span class=line><span class=cl>4: o
+</span></span><span class=line><span class=cl>5: !
+</span></span><span class=line><span class=cl>6: %
+</span></span></code></pre></td></tr></table></div></div><h1 id=zip>zip</h1><p>zip的作用是, 输入<strong>任意</strong>多个range, 并将它们合并遍历, 即每次迭代所有的range. 直到某个主range终止, 或者其中任意一个range终止.
+类似于Python的zip, 以及Rust的zip.
+不过Rust由于缺少Variadic Generics, 标准库中的zip只能接收2个输入. 如果要多个输入, 需要用宏.</p><p>我们实现的版本中, 会把第一个range作为主range, 以它的终止作为终止. 也就是要求其它Range需要至少和它一样长.
+此外, 这次我们改用<code>begin</code>和<code>end</code>对来接收range. 没有什么本质区别.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-cpp data-lang=cpp><span class=line><span class=cl><span class=k>template</span> <span class=o>&lt;</span><span class=k>typename</span> <span class=n>Iter0</span><span class=p>,</span> <span class=k>typename</span> <span class=p>...</span><span class=n>Iters</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=k>constexpr</span> <span class=k>auto</span> <span class=n>zip</span><span class=p>(</span><span class=n>Iter0</span> <span class=n>begin0</span><span class=p>,</span> <span class=n>Iter0</span> <span class=n>end0</span><span class=p>,</span> <span class=n>Iters</span> <span class=p>...</span><span class=n>Begins</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>struct</span> <span class=nc>ZipIterator</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>Iter0</span> <span class=n>iter0_</span><span class=p>;</span> <span class=c1>// the pivot
+</span></span></span><span class=line><span class=cl>        <span class=n>std</span><span class=o>::</span><span class=n>tuple</span><span class=o>&lt;</span><span class=n>Iters</span><span class=p>...</span><span class=o>&gt;</span> <span class=n>iters_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>auto</span> <span class=k>operator</span><span class=o>*</span><span class=p>()</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=n>std</span><span class=o>::</span><span class=n>apply</span><span class=p>([</span><span class=k>this</span><span class=p>](</span><span class=k>auto</span><span class=o>&amp;&amp;</span> <span class=p>...</span><span class=n>iters</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>                <span class=k>return</span> <span class=n>std</span><span class=o>::</span><span class=n>tuple</span><span class=o>&lt;</span><span class=k>decltype</span><span class=p>(</span><span class=o>*</span><span class=n>begin0</span><span class=p>),</span> <span class=k>decltype</span><span class=p>(</span><span class=o>*</span><span class=n>Begins</span><span class=p>)...</span><span class=o>&gt;</span><span class=p>{</span><span class=o>*</span><span class=n>iter0_</span><span class=p>,</span> <span class=p>(</span><span class=o>*</span><span class=n>iters</span><span class=p>)...};</span>
+</span></span><span class=line><span class=cl>            <span class=p>},</span>
+</span></span><span class=line><span class=cl>            <span class=n>iters_</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=kt>bool</span> <span class=k>operator</span><span class=o>==</span><span class=p>(</span><span class=k>const</span> <span class=n>ZipIterator</span><span class=o>&amp;</span> <span class=n>rhs</span><span class=p>)</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=n>iter0_</span> <span class=o>==</span> <span class=n>rhs</span><span class=p>.</span><span class=n>iter0_</span><span class=p>;</span> <span class=c1>// only the pivot is compared!
+</span></span></span><span class=line><span class=cl>                                         <span class=c1>// Ideally, all iters should be compared, except when iter0 has reached end.
+</span></span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=kt>bool</span> <span class=k>operator</span><span class=o>!=</span><span class=p>(</span><span class=k>const</span> <span class=n>ZipIterator</span><span class=o>&amp;</span> <span class=n>rhs</span><span class=p>)</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=n>iter0_</span> <span class=o>!=</span> <span class=n>rhs</span><span class=p>.</span><span class=n>iter0_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=k>auto</span><span class=o>&amp;</span> <span class=k>operator</span><span class=o>++</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=o>++</span><span class=n>iter0_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=n>std</span><span class=o>::</span><span class=n>apply</span><span class=p>([](</span><span class=k>auto</span><span class=o>&amp;&amp;</span> <span class=p>...</span><span class=n>iters</span><span class=p>)</span> <span class=p>{</span> <span class=p>((</span><span class=o>++</span><span class=n>iters</span><span class=p>),...);</span> <span class=p>},</span> <span class=n>iters_</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=o>*</span><span class=k>this</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// These are made-up. You should probably use something more sensible.
+</span></span></span><span class=line><span class=cl>        <span class=k>using</span> <span class=n>difference_type</span> <span class=o>=</span> <span class=k>typename</span> <span class=n>std</span><span class=o>::</span><span class=n>iterator_traits</span><span class=o>&lt;</span><span class=n>Iter0</span><span class=o>&gt;::</span><span class=n>difference_type</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>using</span> <span class=n>value_type</span>      <span class=o>=</span> <span class=n>std</span><span class=o>::</span><span class=n>tuple</span><span class=o>&lt;</span><span class=k>decltype</span><span class=p>(</span><span class=o>*</span><span class=n>begin0</span><span class=p>),</span> <span class=k>decltype</span><span class=p>(</span><span class=o>*</span><span class=n>Begins</span><span class=p>)...</span><span class=o>&gt;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>using</span> <span class=n>pointer</span>         <span class=o>=</span> <span class=kt>void</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>using</span> <span class=n>reference</span>       <span class=o>=</span> <span class=k>const</span> <span class=n>value_type</span><span class=o>&amp;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>using</span> <span class=n>iterator_category</span> <span class=o>=</span> <span class=n>std</span><span class=o>::</span><span class=n>input_iterator_tag</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>};</span>
+</span></span><span class=line><span class=cl>    <span class=k>struct</span> <span class=nc>ZipProxy</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>Iter0</span> <span class=n>begin0_</span><span class=p>,</span> <span class=n>end0_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>std</span><span class=o>::</span><span class=n>tuple</span><span class=o>&lt;</span><span class=n>Iters</span><span class=p>...</span><span class=o>&gt;</span> <span class=n>iters_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>        <span class=n>ZipIterator</span> <span class=nf>begin</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=p>{</span><span class=n>begin0_</span><span class=p>,</span> <span class=n>iters_</span><span class=p>};</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=n>ZipIterator</span> <span class=nf>end</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=p>{</span><span class=n>end0_</span><span class=p>,</span> <span class=n>iters_</span><span class=p>};</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>};</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>ZipProxy</span><span class=p>{</span><span class=n>begin0</span><span class=p>,</span> <span class=n>end0</span><span class=p>,</span> <span class=p>{</span><span class=n>Begins</span><span class=p>...}};</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>与前面的<code>enumerate</code>类似, 我们仍然是返回函数内部定义的<code>ZipProxy</code>类. 我们需要储存主range的<code>begin</code>和<code>end</code>, 以及所有其它range的<code>begin</code>.</p><p>为了储存其它所有<code>begin</code> iterator (即<code>Iters ...Begins</code>这个可变参数), 我们直接使用了<code>std::tuple</code>.
+这里没必要去自己实现, 因为自己实现相当于重新发明一遍tuple.</p><p>从<code>ZipProxy</code>产生的<code>ZipIterator</code>, 会被赋予主range的iterator, 以及其它range的iterator.
+<code>ZipIterator</code>的比较操作仅取决于主iterator.
+递增就是把每个iterator递增. 而解引用操作, 返回了一个tuple, 装着所有当前元素的引用.</p><p>为了实现递增和解引用, 我们直接对tuple使用<code>std::apply</code>, 把装着iterators的tuple展开成函数参数, 在一个lambda函数中对这些iterator进行遍历操作或展开. 其中递增操作用了一个comma fold.</p><h2 id=使用例-1>使用例</h2><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>const</span> <span class=n>std</span><span class=o>::</span><span class=n>vector</span> <span class=n>v</span><span class=p>{</span><span class=mi>2</span><span class=p>,</span><span class=mi>3</span><span class=p>,</span><span class=mi>4</span><span class=p>};</span>
+</span></span><span class=line><span class=cl><span class=k>const</span> <span class=kt>char</span><span class=o>*</span> <span class=n>s</span> <span class=o>=</span> <span class=s>&#34;abc&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>for</span> <span class=p>(</span><span class=k>const</span> <span class=k>auto</span> <span class=p>[</span><span class=n>vv</span><span class=p>,</span> <span class=n>ss</span><span class=p>]</span> <span class=o>:</span><span class=n>zip</span><span class=p>(</span><span class=n>v</span><span class=p>.</span><span class=n>cbegin</span><span class=p>(),</span> <span class=n>v</span><span class=p>.</span><span class=n>cend</span><span class=p>(),</span> <span class=n>s</span><span class=p>))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>std</span><span class=o>::</span><span class=n>cout</span> <span class=o>&lt;&lt;</span> <span class=n>vv</span> <span class=o>&lt;&lt;</span> <span class=s>&#34; | &#34;</span> <span class=o>&lt;&lt;</span> <span class=n>ss</span> <span class=o>&lt;&lt;</span> <span class=sc>&#39;\n&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>运行结果:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-fallback data-lang=fallback><span class=line><span class=cl>2 | a
+</span></span><span class=line><span class=cl>3 | b
+</span></span><span class=line><span class=cl>4 | c
+</span></span></code></pre></td></tr></table></div></div><h1 id=ndindex>NdIndex</h1><p>即<a class=link href=https://numpy.org/doc/stable/reference/generated/numpy.ndindex.html target=_blank rel=noopener>numpy.ndindex</a>. 严格来说它不是iterator adaptor, 而是一个每次生成新元素的range.</p><p>它也是笛卡尔积<a class=link href=https://en.cppreference.com/w/cpp/ranges/cartesian_product_view target=_blank rel=noopener><code>ranges::views::cartesian_product</code></a>的一种特殊情况, 但实现本质上和<code>cartesian_product</code>没有区别.</p><p>这次我们使用一个类来表示<code>NdIndex</code>. 当然, 用函数产生range也是完全可行的. 这里仅是为了演示.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span><span class=lnt>62
+</span><span class=lnt>63
+</span><span class=lnt>64
+</span><span class=lnt>65
+</span><span class=lnt>66
+</span><span class=lnt>67
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>template</span> <span class=o>&lt;</span><span class=n>std</span><span class=o>::</span><span class=n>size_t</span> <span class=n>Dim</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>NdIndex</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl><span class=k>private</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=n>std</span><span class=o>::</span><span class=n>array</span><span class=o>&lt;</span><span class=n>std</span><span class=o>::</span><span class=n>size_t</span><span class=p>,</span> <span class=n>Dim</span><span class=o>&gt;</span> <span class=n>sizes_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>public</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=k>static</span> <span class=k>constexpr</span> <span class=k>auto</span> <span class=n>ndim</span> <span class=o>=</span> <span class=n>Dim</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>template</span> <span class=o>&lt;</span><span class=k>typename</span> <span class=p>...</span><span class=n>Ts</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=n>NdIndex</span><span class=p>(</span><span class=n>Ts</span> <span class=p>...</span><span class=n>Args</span><span class=p>)</span> <span class=k>noexcept</span> <span class=o>:</span> <span class=n>sizes_</span><span class=p>{</span><span class=n>std</span><span class=o>::</span><span class=n>size_t</span><span class=p>(</span><span class=n>Args</span><span class=p>)...}</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>class</span> <span class=nc>Iter</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>friend</span> <span class=k>class</span> <span class=nc>NdIndex</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>private</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>        <span class=n>std</span><span class=o>::</span><span class=n>array</span><span class=o>&lt;</span><span class=n>std</span><span class=o>::</span><span class=n>size_t</span><span class=p>,</span> <span class=n>Dim</span><span class=o>&gt;</span> <span class=n>idx_</span><span class=p>{};</span>
+</span></span><span class=line><span class=cl>        <span class=n>std</span><span class=o>::</span><span class=n>array</span><span class=o>&lt;</span><span class=n>std</span><span class=o>::</span><span class=n>size_t</span><span class=p>,</span> <span class=n>Dim</span><span class=o>&gt;</span> <span class=n>sizes_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=c1>// helper for loop unrolling
+</span></span></span><span class=line><span class=cl>        <span class=k>template</span> <span class=o>&lt;</span><span class=n>std</span><span class=o>::</span><span class=n>size_t</span> <span class=p>...</span><span class=n>Is</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>        <span class=k>constexpr</span> <span class=kt>void</span> <span class=n>increment</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>index_sequence</span><span class=o>&lt;</span><span class=n>Is</span><span class=p>...</span><span class=o>&gt;</span><span class=p>)</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=p>([</span><span class=k>this</span><span class=p>]</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>                <span class=k>constexpr</span> <span class=k>auto</span> <span class=n>i</span> <span class=o>=</span> <span class=n>Dim</span> <span class=o>-</span> <span class=mi>1</span> <span class=o>-</span> <span class=n>Is</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>                <span class=k>if</span> <span class=nf>constexpr</span> <span class=p>(</span><span class=n>i</span> <span class=o>==</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>                    <span class=o>++</span><span class=n>idx_</span><span class=p>[</span><span class=mi>0</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>                    <span class=k>return</span> <span class=nb>true</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>                <span class=p>}</span>
+</span></span><span class=line><span class=cl>                <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>                    <span class=k>if</span> <span class=p>(</span><span class=o>++</span><span class=n>idx_</span><span class=p>[</span><span class=n>i</span><span class=p>]</span> <span class=o>&lt;</span> <span class=n>sizes_</span><span class=p>[</span><span class=n>i</span><span class=p>])</span> <span class=k>return</span> <span class=nb>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>                    <span class=n>idx_</span><span class=p>[</span><span class=n>i</span><span class=p>]</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>                    <span class=k>return</span> <span class=nb>true</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>                <span class=p>}</span>
+</span></span><span class=line><span class=cl>            <span class=p>}()</span> <span class=o>&amp;&amp;</span> <span class=p>...);</span> <span class=c1>// short-circuit fold
+</span></span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>        <span class=k>constexpr</span> <span class=k>auto</span><span class=o>&amp;</span> <span class=k>operator</span><span class=o>*</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span> <span class=k>return</span> <span class=n>idx_</span><span class=p>;</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=k>constexpr</span> <span class=k>auto</span><span class=o>&amp;</span> <span class=k>operator</span><span class=o>++</span><span class=p>()</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=n>increment</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>make_index_sequence</span><span class=o>&lt;</span><span class=n>Dim</span><span class=o>&gt;</span><span class=p>{});</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=o>*</span><span class=k>this</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=k>constexpr</span> <span class=kt>bool</span> <span class=k>operator</span><span class=o>==</span><span class=p>(</span><span class=k>const</span> <span class=n>Iter</span><span class=o>&amp;</span> <span class=n>rhs</span><span class=p>)</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=n>idx_</span> <span class=o>==</span> <span class=n>rhs</span><span class=p>.</span><span class=n>idx_</span><span class=p>;</span> <span class=c1>// sizes?
+</span></span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=k>constexpr</span> <span class=kt>bool</span> <span class=k>operator</span><span class=o>!=</span><span class=p>(</span><span class=k>const</span> <span class=n>Iter</span><span class=o>&amp;</span> <span class=n>rhs</span><span class=p>)</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=o>!</span><span class=p>(</span><span class=o>*</span><span class=k>this</span> <span class=o>==</span> <span class=n>rhs</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span><span class=o>:</span> <span class=c1>// traits
+</span></span></span><span class=line><span class=cl>        <span class=k>using</span> <span class=n>difference_type</span> <span class=o>=</span> <span class=n>std</span><span class=o>::</span><span class=n>make_signed_t</span><span class=o>&lt;</span><span class=n>std</span><span class=o>::</span><span class=n>size_t</span><span class=o>&gt;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>using</span> <span class=n>value_type</span>      <span class=o>=</span> <span class=k>decltype</span><span class=p>(</span><span class=n>idx_</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>using</span> <span class=n>pointer</span>         <span class=o>=</span> <span class=kt>void</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>using</span> <span class=n>reference</span>       <span class=o>=</span> <span class=k>const</span> <span class=n>value_type</span><span class=o>&amp;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>using</span> <span class=n>iterator_category</span> <span class=o>=</span> <span class=n>std</span><span class=o>::</span><span class=n>input_iterator_tag</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>};</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=k>auto</span> <span class=nf>begin</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>Iter</span> <span class=n>it</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>it</span><span class=p>.</span><span class=n>sizes_</span> <span class=o>=</span> <span class=n>sizes_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=n>it</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>constexpr</span> <span class=k>auto</span> <span class=nf>end</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>Iter</span> <span class=n>it</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>it</span><span class=p>.</span><span class=n>idx_</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span> <span class=o>=</span> <span class=n>sizes_</span><span class=p>[</span><span class=mi>0</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>        <span class=n>it</span><span class=p>.</span><span class=n>sizes_</span> <span class=o>=</span> <span class=n>sizes_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=n>it</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span><span class=line><span class=cl><span class=c1>// CTAD guide
+</span></span></span><span class=line><span class=cl><span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=p>...</span><span class=n>Ts</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=n>NdIndex</span><span class=p>(</span><span class=n>Ts</span> <span class=p>...</span><span class=n>Args</span><span class=p>)</span> <span class=o>-&gt;</span> <span class=n>NdIndex</span><span class=o>&lt;</span><span class=k>sizeof</span><span class=p>...(</span><span class=n>Ts</span><span class=p>)</span><span class=o>&gt;</span><span class=p>;</span>
+</span></span></code></pre></td></tr></table></div></div><p><code>NdIndex</code>的唯一模板参数是它的维度个数<code>Dim</code>. 使用者构建<code>NdIndex</code>对象时, 参数为各个维度上的长度.
+通过代码末尾处的一个CTAD提示, 我们告诉编译器, 构建函数的参数个数, 就是模板参数<code>Dim</code>. 这里的CTAD guide是必须的.</p><p>显然, <code>NdIndex</code>类需要保存每个维度上的最大长度. 而<code>NdIndex</code>给出的iterator, 即它的子类<code>NdIndex::Iter</code>, 则需要当前的每个维度的下标, 以及最大长度.
+而iterator的比较操作, 就是逐个比较它们保存的所有下标. 此外, end iterator是通过最高维度的下标达到长度值来表示, 到此就应终止迭代.</p><p>为了方便, 我们直接用<code>std::array</code>, 自动提供赋值, 比较等操作. 同时作为<code>operator*()</code>的返回值, 它也是一个<em>tuple-like</em>的类, 能够被structured binding展开.</p><h2 id=递增>递增</h2><p><code>NdIndex</code>的主要逻辑实现在于它的递增函数. 为了编译期展开循环, 我们把<code>operator++()</code>用<code>std::index_sequence</code>做了一次转接, 以便在<code>increment</code>函数中按每个维度展开.</p><p><code>increment</code>函数的每次执行, 是把一个IIFE表达式 (立即执行的lambda函数, 这里的目的是为了把多行代码就地变成一个返回<code>true</code>或<code>false</code>的expression)
+按照编译期确定的<code>0, 1, ..., Dim-1</code>几个维度展开, 展开后用<code>&&</code>算符实现短路执行: 即当某个维度的IIFE返回false后, 剩下维度的操作就不会被执行.</p><p>注意IIFE按维度执行的顺序是从低维开始. 这个IIFE表达式的意义就比较明晰了:</p><ul><li>如果是最高的维度(这是一个编译期判断), 就直接把这个维度加1, 加到最大后迭代就会停止. 返回<code>true</code>或<code>false</code>无所谓, 因为这是逻辑和的最后一个表达式.</li><li>如果是其它维度, 那么<ul><li>如果加1后还未达到长度值, 就直接返回<code>false</code>, 结束本次<code>increment</code>.</li><li>如果加1后达到了长度值, 就进位: 把这一维度设为0, 然后返回<code>true</code>, 继续更高维度.</li></ul></li></ul><blockquote><p>Tip: 用<code>&&</code>算符的fold expression, 实现可在运行时跳出的编译期循环! 有点绕)</p></blockquote><h2 id=改进>改进</h2><ol><li>这里的<code>NdIndex</code>的下标类型是固定的<code>size_t</code>, 不难把它改成以整数类型为模板参数的类模板.</li><li><code>NdIndex</code>存在一个potential的bug, 即处理各维度的长度之一(除了最高维度)是0的情况. 当前的行为相当于直接跳过了这个维度, 它一直是0. 但我认为正确的行为应当是使整个range为空.
+如果要实现这个行为, 只需要和end比较时, 比较每个维度是否达到了最大值.</li></ol><h1 id=总结>总结</h1><p>上面的三个实现都是出于PoC展示的目的, 并不算严密, 如果要作为一个正式的库发布, 还有不少需要修改的地方, 但可以作为iterator adaptor的概念展示,
+读者看完后, 应该不难在C++20之前的版本自己实现其它的adaptor.</p><h2 id=adaptor组合>adaptor组合</h2><p>组合起来用:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;fmt/ranges.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>constexpr</span> <span class=k>auto</span> <span class=n>nd1</span> <span class=o>=</span> <span class=n>NdIndex</span><span class=p>{</span><span class=mi>2</span><span class=p>,</span><span class=mi>3</span><span class=p>};</span>
+</span></span><span class=line><span class=cl><span class=k>constexpr</span> <span class=k>auto</span> <span class=n>nd2</span> <span class=o>=</span> <span class=n>NdIndex</span><span class=p>{</span><span class=mi>3</span><span class=p>,</span><span class=mi>2</span><span class=p>};</span>
+</span></span><span class=line><span class=cl><span class=k>for</span> <span class=p>(</span><span class=k>const</span> <span class=k>auto</span><span class=o>&amp;</span> <span class=nl>a</span> <span class=p>:</span> <span class=n>enumerate</span><span class=p>(</span><span class=n>zip</span><span class=p>(</span><span class=n>nd1</span><span class=p>.</span><span class=n>begin</span><span class=p>(),</span> <span class=n>nd1</span><span class=p>.</span><span class=n>end</span><span class=p>(),</span> <span class=n>nd2</span><span class=p>.</span><span class=n>begin</span><span class=p>())))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>fmt</span><span class=o>::</span><span class=n>println</span><span class=p>(</span><span class=s>&#34;{}&#34;</span><span class=p>,</span> <span class=n>a</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>由于我们的<code>zip</code>函数是接收begin/end, 因此只能把需要被zip的range单独声明在前.</p><p>运行结果:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-fallback data-lang=fallback><span class=line><span class=cl>(0, ([0, 0], [0, 0]))
+</span></span><span class=line><span class=cl>(1, ([0, 1], [0, 1]))
+</span></span><span class=line><span class=cl>(2, ([0, 2], [1, 0]))
+</span></span><span class=line><span class=cl>(3, ([1, 0], [1, 1]))
+</span></span><span class=line><span class=cl>(4, ([1, 1], [2, 0]))
+</span></span><span class=line><span class=cl>(5, ([1, 2], [2, 1]))
+</span></span></code></pre></td></tr></table></div></div></section><footer class=article-footer><section class=article-tags><a href=/tags/c++/>C++</a>
+<a href=/tags/iterator/>Iterator</a>
+<a href=/tags/template-metaprogramming/>Template Metaprogramming</a></section><section class=article-copyright><svg class="icon icon-tabler icon-tabler-copyright" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="12" cy="12" r="9"/><path d="M14.5 9a3.5 4 0 100 6"/></svg>
+<span>Licensed under CC BY-NC-SA 4.0</span></section></footer></article><aside class=related-content--wrapper><h2 class=section-title>Related content</h2><div class=related-content><div class="flex article-list--tile"><article><a href=/p/compile-time-loops-in-c/><div class=article-details><h2 class=article-title>Compile time loops in C++</h2></div></a></article><article><a href=/p/imperfect-forwarding/><div class=article-details><h2 class=article-title>(Im)perfect forwarding</h2></div></a></article></div></div></aside><div class=disqus-container></div><style>.disqus-container{background-color:var(--card-background);border-radius:var(--card-border-radius);box-shadow:var(--shadow-l1);padding:var(--card-padding)}</style><script>window.addEventListener("onColorSchemeChange",e=>{typeof DISQUS=="object"&&DISQUS.reset({reload:!0})})</script><footer class=site-footer><section class=copyright>&copy;
+2020 -
+2026 Kya's Blog</section><section class=powerby>Built with <a href=https://gohugo.io/ target=_blank rel=noopener>Hugo</a><br>Theme <b><a href=https://github.com/CaiJimmy/hugo-theme-stack target=_blank rel=noopener data-version=3.31.0>Stack</a></b> designed by <a href=https://jimmycai.com target=_blank rel=noopener>Jimmy</a></section></footer><div class=pswp tabindex=-1 role=dialog aria-hidden=true><div class=pswp__bg></div><div class=pswp__scroll-wrap><div class=pswp__container><div class=pswp__item></div><div class=pswp__item></div><div class=pswp__item></div></div><div class="pswp__ui pswp__ui--hidden"><div class=pswp__top-bar><div class=pswp__counter></div><button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+<button class="pswp__button pswp__button--share" title=Share></button>
+<button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+<button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button><div class=pswp__preloader><div class=pswp__preloader__icn><div class=pswp__preloader__cut><div class=pswp__preloader__donut></div></div></div></div></div><div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap"><div class=pswp__share-tooltip></div></div><button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+</button>
+<button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)"></button><div class=pswp__caption><div class=pswp__caption__center></div></div></div></div></div><script src=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js integrity="sha256-ePwmChbbvXbsO02lbM3HoHbSHTHFAeChekF1xKJdleo=" crossorigin=anonymous defer></script><script src=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js integrity="sha256-UKkzOn/w1mBxRmLLGrSeyB4e1xbrp4xylgAWb3M42pU=" crossorigin=anonymous defer></script><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.min.css crossorigin=anonymous><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.css crossorigin=anonymous></main></div><script src=https://cdn.jsdelivr.net/npm/node-vibrant@3.1.6/dist/vibrant.min.js integrity="sha256-awcR2jno4kI5X0zL8ex0vi2z+KMkF24hUW8WePSA9HM=" crossorigin=anonymous></script><script type=text/javascript src=/ts/main.1e9a3bafd846ced4c345d084b355fb8c7bae75701c338f8a1f8a82c780137826.js defer></script><script>(function(){const e=document.createElement("link");e.href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap",e.type="text/css",e.rel="stylesheet",document.head.appendChild(e)})()</script></body></html>

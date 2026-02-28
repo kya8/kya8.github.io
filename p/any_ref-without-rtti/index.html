@@ -1,0 +1,329 @@
+<!doctype html><html lang=en-us dir=ltr><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><meta name=description content="...以及不同平台动态链接实现的影响"><title>any_ref without RTTI</title><link rel=canonical href=https://kya8.github.io/p/any_ref-without-rtti/><link rel=stylesheet href=/scss/style.min.8659d82dbe8d0fe183ef22445ed42765c7d1d996ae5b4a02725eda69426286da.css><meta property='og:title' content="any_ref without RTTI"><meta property='og:description' content="...以及不同平台动态链接实现的影响"><meta property='og:url' content='https://kya8.github.io/p/any_ref-without-rtti/'><meta property='og:site_name' content="Kya's Blog"><meta property='og:type' content='article'><meta property='article:section' content='Post'><meta property='article:tag' content='c++'><meta property='article:tag' content='linker'><meta property='article:tag' content='compiler'><meta property='article:tag' content='cross-platform'><meta property='article:published_time' content='2025-01-09T00:00:00+00:00'><meta property='article:modified_time' content='2025-11-24T00:00:00+00:00'><meta name=twitter:title content="any_ref without RTTI"><meta name=twitter:description content="...以及不同平台动态链接实现的影响"></head><body class=article-page><script>(function(){const e="StackColorScheme";localStorage.getItem(e)||localStorage.setItem(e,"auto")})()</script><script>(function(){const t="StackColorScheme",e=localStorage.getItem(t),n=window.matchMedia("(prefers-color-scheme: dark)").matches===!0;e=="dark"||e==="auto"&&n?document.documentElement.dataset.scheme="dark":document.documentElement.dataset.scheme="light"})()</script><div class="container main-container flex on-phone--column extended"><aside class="sidebar left-sidebar sticky"><button class="hamburger hamburger--spin" type=button id=toggle-menu aria-label="Toggle Menu">
+<span class=hamburger-box><span class=hamburger-inner></span></span></button><header><div class=site-meta><h1 class=site-name><a href=/>Kya's Blog</a></h1><h2 class=site-description></h2></div></header><ol class=menu-social><li><a href=https://github.com/kya8 target=_blank title=GitHub rel=me><svg class="icon icon-tabler icon-tabler-brand-github" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6.0 00-1.3-3.2 4.2 4.2.0 00-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3.0 00-6.2.0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2.0 00-.1 3.2A4.6 4.6.0 004 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg></a></li></ol><ol class=menu id=main-menu><li><a href=/><svg class="icon icon-tabler icon-tabler-home" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><polyline points="5 12 3 12 12 3 21 12 19 12"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/><path d="M9 21v-6a2 2 0 012-2h2a2 2 0 012 2v6"/></svg>
+<span>Home</span></a></li><li><a href=/archives/><svg class="icon icon-tabler icon-tabler-archive" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><rect x="3" y="4" width="18" height="4" rx="2"/><path d="M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+<span>Archives</span></a></li><li><a href=/search/><svg class="icon icon-tabler icon-tabler-search" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15" y2="15"/></svg>
+<span>Search</span></a></li><li class=menu-bottom-section><ol class=menu><li id=dark-mode-toggle><svg class="icon icon-tabler icon-tabler-toggle-left" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="8" cy="12" r="2"/><rect x="2" y="6" width="20" height="12" rx="6"/></svg>
+<svg class="icon icon-tabler icon-tabler-toggle-right" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="16" cy="12" r="2"/><rect x="2" y="6" width="20" height="12" rx="6"/></svg>
+<span>Dark Mode</span></li></ol></li></ol></aside><aside class="sidebar right-sidebar sticky"><section class="widget archives"><div class=widget-icon><svg class="icon icon-tabler icon-tabler-hash" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><line x1="5" y1="9" x2="19" y2="9"/><line x1="5" y1="15" x2="19" y2="15"/><line x1="11" y1="4" x2="7" y2="20"/><line x1="17" y1="4" x2="13" y2="20"/></svg></div><h2 class="widget-title section-title">Table of contents</h2><div class=widget--toc><nav id=TableOfContents><ol><li><a href=#stdany-vs-any_ref><code>std::any</code> vs <code>any_ref</code></a><ol><li><a href=#非所有权的类型擦除引用>非所有权的类型擦除引用</a></li></ol></li><li><a href=#实现any_ref>实现<code>any_ref</code></a><ol><li><a href=#无rtti实现>无RTTI实现</a></li></ol></li><li><a href=#跨编译单元行为>跨编译单元行为</a><ol><li><a href=#测试程序>测试程序</a></li><li><a href=#静态链接>静态链接</a></li><li><a href=#动态链接>动态链接</a><ol><li><a href=#windows-11-msvc>Windows 11, MSVC</a></li><li><a href=#linux-gcc-glibc>Linux, GCC, glibc</a></li><li><a href=#linux-gcc-musl>Linux, GCC, musl</a></li><li><a href=#linux-clang-glibc>Linux, Clang, glibc</a></li><li><a href=#linux-但-fvisibilityhidden>Linux, 但<code>-fvisibility=hidden</code></a></li><li><a href=#macos-26-apple-clang-17>macOS 26, Apple clang 17</a></li></ol></li></ol></li><li><a href=#结果解读>结果解读</a><ol><li><a href=#linux>Linux</a><ol><li><a href=#clang>Clang</a></li><li><a href=#gcc>GCC</a></li><li><a href=#-fvisibilityhidden><code>-fvisibility=hidden</code></a></li></ol></li><li><a href=#windows>Windows</a><ol><li><a href=#导出符号>导出符号</a></li></ol></li><li><a href=#macos>macOS</a></li><li><a href=#结论>结论</a></li></ol></li></ol></nav></div></section></aside><main class="main full-width"><article class=main-article><header class=article-header><div class=article-details><div class=article-title-wrapper><h2 class=article-title><a href=/p/any_ref-without-rtti/>any_ref without RTTI</a></h2><h3 class=article-subtitle>...以及不同平台动态链接实现的影响</h3></div><footer class=article-time><div><svg class="icon icon-tabler icon-tabler-calendar-time" width="56" height="56" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><path d="M11.795 21H5a2 2 0 01-2-2V7a2 2 0 012-2h12a2 2 0 012 2v4"/><circle cx="18" cy="18" r="4"/><path d="M15 3v4"/><path d="M7 3v4"/><path d="M3 11h16"/><path d="M18 16.496V18l1 1"/></svg>
+<time class=article-time--published>Jan 09, 2025</time></div><div><svg class="icon icon-tabler icon-tabler-clock" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+<time class=article-time--reading>5 minute read</time></div></footer></div></header><section class=article-content><h1 id=stdany-vs-any_ref><code>std::any</code> vs <code>any_ref</code></h1><p>众所周知, <code>std::any</code>是一个类型擦除的容器. 相比<code>void*</code>的, 它的主要区别就是:</p><ol><li><code>any_cast</code>会保证类型安全.</li><li>有明确的所有权语义, 会自己管理被容纳对象的析构, 拷贝等操作. 而<code>void*</code>的所有权语义不明.</li></ol><h2 id=非所有权的类型擦除引用>非所有权的类型擦除引用</h2><p>如果我们把上述的第二点改为明确的无所有权语义, 那就得到了<code>any_ref</code>. 类似于<code>std::function</code>和<code>std::function_ref</code>的区别.</p><p>不过, C++标准库中目前还没有<code>any_ref</code>. 在一些第三方库中能见到.</p><h1 id=实现any_ref>实现<code>any_ref</code></h1><p><code>any_ref</code>的实现要比<code>std::any</code>简单很多, 因为不需要管理对象的生命周期, 实际上可以看做是<code>void*</code>的一个简单wrapper. 相比之下, <code>std::any</code>需要一个类似虚表的结构, 存一些函数指针, 用于析构, 拷贝, move等操作. 一般来说, <code>any_ref</code>只需要存一个<code>void*</code>指针, 和一个用来辨别类型的变量.</p><h2 id=无rtti实现>无RTTI实现</h2><p>如果使用RTTI, 那么只需要对比构建时和cast时的<code>typeid</code>即可. 但为了性能等原因, 如果不使用RTTI, 能不能实现? 答案是肯定的, 只需要利用<code>inline</code>函数或变量<em>地址的唯一性</em>.</p><blockquote><p>An inline function or variable shall be defined in every translation unit in which it is odr-used and shall
+have exactly the same definition in every case (6.2). &mldr;&mldr; <strong>An
+inline function or variable with external linkage shall have the same address in all translation units.</strong><br>&ndash; <em>C++17 specification n4713, §10.1.6</em></p></blockquote><p>例如, 我们可以使用一个<code>inline</code>的变量模版, 这个模版若用相同的模板类型实参单态化, 即使是在不同的编译单元(TU)内, 产生的变量也会具有相同的指针地址.
+反之, 如果用不同的类型单态化, 变量地址也会不同. 利用这一点就能实现<code>any_ref</code>cast时的类型验证.</p><p>这里直接给出一个简单的实现:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdexcept&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;type_traits&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=n>detail</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>T</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=kr>inline</span> <span class=kt>int</span> <span class=n>any_ref_helper</span><span class=p>{};</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=p>}</span> <span class=c1>// namespace detail
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>AnyRef</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl><span class=k>public</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>T</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>             <span class=c1>// Prevent shadowing the copy constructor
+</span></span></span><span class=line><span class=cl>             <span class=k>typename</span> <span class=o>=</span> <span class=n>std</span><span class=o>::</span><span class=n>enable_if_t</span><span class=o>&lt;!</span><span class=n>std</span><span class=o>::</span><span class=n>is_same_v</span><span class=o>&lt;</span><span class=n>AnyRef</span><span class=p>,</span> <span class=n>std</span><span class=o>::</span><span class=n>remove_cv_t</span><span class=o>&lt;</span><span class=n>T</span><span class=o>&gt;&gt;&gt;</span>
+</span></span><span class=line><span class=cl>             <span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=n>AnyRef</span><span class=p>(</span><span class=n>T</span><span class=o>&amp;</span> <span class=n>val</span><span class=p>)</span> <span class=k>noexcept</span> <span class=o>:</span> <span class=n>data_</span><span class=p>(</span><span class=k>const_cast</span><span class=o>&lt;</span><span class=kt>void</span><span class=o>*&gt;</span><span class=p>(</span><span class=k>static_cast</span><span class=o>&lt;</span><span class=k>const</span> <span class=kt>void</span><span class=o>*&gt;</span><span class=p>(</span><span class=o>&amp;</span><span class=n>val</span><span class=p>))),</span>
+</span></span><span class=line><span class=cl>    <span class=n>type_ptr_</span><span class=p>(</span><span class=o>&amp;</span><span class=n>detail</span><span class=o>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>T</span><span class=o>&gt;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=p>{}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>T</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=n>T</span><span class=o>&amp;</span> <span class=n>cast</span><span class=p>()</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>const</span> <span class=k>auto</span> <span class=n>pT</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>detail</span><span class=o>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>T</span><span class=o>&gt;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>type_ptr_</span> <span class=o>==</span> <span class=n>pT</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=o>*</span><span class=k>static_cast</span><span class=o>&lt;</span><span class=n>T</span><span class=o>*&gt;</span><span class=p>(</span><span class=n>data_</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=k>throw</span> <span class=n>std</span><span class=o>::</span><span class=n>runtime_error</span><span class=p>(</span><span class=s>&#34;Bad type!&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>T</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=n>T</span><span class=o>*</span> <span class=n>cast_if</span><span class=p>()</span> <span class=k>const</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>type_ptr_</span> <span class=o>==</span> <span class=o>&amp;</span><span class=n>detail</span><span class=o>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>T</span><span class=o>&gt;</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=k>static_cast</span><span class=o>&lt;</span><span class=n>T</span><span class=o>*&gt;</span><span class=p>(</span><span class=n>data_</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=k>nullptr</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>private</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span><span class=o>*</span> <span class=n>data_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>const</span> <span class=kt>int</span><span class=o>*</span> <span class=n>type_ptr_</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span></code></pre></td></tr></table></div></div><p><code>inline int any_ref_helper</code>作为上述的变量模版. 构建<code>any_ref</code>时, 成员<code>type_ptr_</code>记录了此模板以原对象的类型实例化后的地址.
+<code>cast()</code>时, 检查以目标类型和原类型实例化的<code>any_ref_helper</code>地址是否相同. 如果相同, 前后类型一致. 否则类型不一致.</p><p>注意, 构建函数用一个SFINAE禁用了以<code>AnyRef</code>为参数(即指向另一个<code>AnyRef</code>)的构建, 否则会导致<code>AnyRef</code>无法拷贝构建.
+(由于<code>AnyRef</code>是一个非所有权引用, 因此它应当以拷贝传递/值传递, 类似<code>std::string_view</code>)</p><h1 id=跨编译单元行为>跨编译单元行为</h1><p>为了测试上面的<code>AnyRef</code>, 如果我们写一个简单的测试程序, 只有一个main.cpp, 那么显然可以work, 这种情况下<code>any_ref_helper&lt;T></code>只有单个定义, 加不加<code>inline</code>都没区别.</p><p>有趣的部分在于, 如果在不同编译单元, 甚至跨动态链接边界, 分别使用<code>AnyRef</code>的构建和cast, 是否能如期达成类型安全?
+<strong>毕竟这种类型擦除的主要意义就在于跨API, 跨编译单元</strong>, 用于减少编译头文件依赖, 加快编译, 统一API处类型等目的. 如果只在单个编译单元内部使用它, 属于是脱裤子放屁.</p><p>回顾上文引用的C++标准段落, <strong>单个程序(program)中</strong>, 一个<code>inline</code>对象在不同编译单元的多个定义必定有相同的地址.</p><p>但是:</p><ul><li>如果这些编译单元最终一起被静态链接到一个程序中, 那么它们应当是属于单个program, 因此地址的唯一性成立.</li><li>如果一些编译单元最终成为一个动态链接库(DSO), 那么原则上这个DSO应当是一个单独的program, 和调用它的程序独立.</li></ul><p>因此, 问题主要在于动态链接. 这里的bottomline是, C++标准不能保证各个平台/编译器上<code>inline</code>地址唯一性能够跨动态链接成立.
+但是, 不同的平台对动态链接的实现不同, 因此具体行为可能存在差异.</p><p>总之关键在于: <code>inline</code>对象在不同编译单元的地址唯一性, 在不同编译/链接环境和平台上, 具体行为如何?</p><h2 id=测试程序>测试程序</h2><p>我们为AnyRef写一个简单的跨TU测试项目.</p><p>项目中定义一个库和一个主程序. 库导出一个函数, 参数为<code>AnyRef</code>.
+而主程序会管理被引用的对象, 把它用<code>AnyRef</code>wrap起来, 传给库的函数.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=c1>// lib.h:
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&#34;any_ref.hpp&#34;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=cp>#if defined(MYLIB_SHARED)
+</span></span></span><span class=line><span class=cl><span class=cp>#   if defined(_WIN32)
+</span></span></span><span class=line><span class=cl><span class=cp>#       if defined(MYLIB_SOURCE)
+</span></span></span><span class=line><span class=cl><span class=cp>#           define MYLIB_EXPORT __declspec(dllexport)
+</span></span></span><span class=line><span class=cl><span class=cp>#       else
+</span></span></span><span class=line><span class=cl><span class=cp>#           define MYLIB_EXPORT __declspec(dllimport)
+</span></span></span><span class=line><span class=cl><span class=cp>#       endif
+</span></span></span><span class=line><span class=cl><span class=cp>#   else
+</span></span></span><span class=line><span class=cl><span class=cp>#       define MYLIB_EXPORT __attribute__((visibility(&#34;default&#34;)))
+</span></span></span><span class=line><span class=cl><span class=cp>#   endif
+</span></span></span><span class=line><span class=cl><span class=cp>#else
+</span></span></span><span class=line><span class=cl>    <span class=cp>#define MYLIB_EXPORT
+</span></span></span><span class=line><span class=cl><span class=cp>#endif
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Assumes str_ref is a const string ref
+</span></span></span><span class=line><span class=cl><span class=n>MYLIB_EXPORT</span> <span class=kt>void</span> <span class=nf>lib_fn</span><span class=p>(</span><span class=n>AnyRef</span> <span class=n>str_ref</span><span class=p>);</span>
+</span></span></code></pre></td></tr></table></div></div><p>注意头文件中使用了API导出宏, 保证作为动态库时能正确导出符号.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span><span class=lnt>9
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=c1>// lib.cpp:
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&#34;lib.h&#34;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;string&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;cstdio&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>lib_fn</span><span class=p>(</span><span class=n>AnyRef</span> <span class=n>str_ref</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>std</span><span class=o>::</span><span class=n>puts</span><span class=p>(</span><span class=n>str_ref</span><span class=p>.</span><span class=n>cast</span><span class=o>&lt;</span><span class=k>const</span> <span class=n>std</span><span class=o>::</span><span class=n>string</span><span class=o>&gt;</span><span class=p>().</span><span class=n>c_str</span><span class=p>());</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=c1>// main.cpp
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;string&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&#34;lib.h&#34;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;iostream&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>main</span><span class=p>()</span>
+</span></span><span class=line><span class=cl><span class=k>try</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>const</span> <span class=n>std</span><span class=o>::</span><span class=n>string</span> <span class=n>str</span> <span class=p>{</span><span class=s>&#34;Hello!&#34;</span><span class=p>};</span>
+</span></span><span class=line><span class=cl>    <span class=n>AnyRef</span> <span class=n>ref</span><span class=p>{</span><span class=n>str</span><span class=p>};</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>std</span><span class=o>::</span><span class=n>cout</span> <span class=o>&lt;&lt;</span> <span class=n>ref</span><span class=p>.</span><span class=n>cast</span><span class=o>&lt;</span><span class=k>const</span> <span class=n>std</span><span class=o>::</span><span class=n>string</span><span class=o>&gt;</span><span class=p>()</span> <span class=o>&lt;&lt;</span> <span class=sc>&#39;\n&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>lib_fn</span><span class=p>(</span><span class=n>ref</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=k>catch</span> <span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>exception</span><span class=o>&amp;</span> <span class=n>ex</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>std</span><span class=o>::</span><span class=n>cout</span> <span class=o>&lt;&lt;</span> <span class=n>ex</span><span class=p>.</span><span class=n>what</span><span class=p>()</span> <span class=o>&lt;&lt;</span> <span class=sc>&#39;\n&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>最后是项目的CMake定义, 通过<code>-DBUILD_SHARED_LIBS=&lt;0/1></code>可选择<code>mylib</code>是编译为静态库还是动态库.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-cmake data-lang=cmake><span class=line><span class=cl><span class=c># simple CMakeLists.txt:
+</span></span></span><span class=line><span class=cl><span class=nb>cmake_minimum_required</span><span class=p>(</span><span class=s>VERSION</span> <span class=s>3.20.0</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>project</span><span class=p>(</span><span class=s>anyref</span> <span class=s>VERSION</span> <span class=s>0.1.0</span> <span class=s>LANGUAGES</span> <span class=s>CXX</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>set</span><span class=p>(</span><span class=s>CMAKE_CXX_STANDARD_REQUIRED</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>set</span><span class=p>(</span><span class=s>CMAKE_CXX_STANDARD</span> <span class=s>17</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>set</span><span class=p>(</span><span class=s>CMAKE_CXX_EXTENSIONS</span> <span class=s>OFF</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>add_compile_options</span><span class=p>(</span><span class=s2>&#34;$&lt;IF:$&lt;CXX_COMPILER_ID:MSVC&gt;,/W4,-Wall;-Wextra;-pedantic&gt;&#34;</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>add_library</span><span class=p>(</span><span class=s>mylib</span> <span class=s>lib.h</span> <span class=s>lib.cpp</span> <span class=s>any_ref.hpp</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># --- For export macros
+</span></span></span><span class=line><span class=cl><span class=nb>get_target_property</span><span class=p>(</span><span class=s>mylib_type</span> <span class=s>mylib</span> <span class=s>TYPE</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>if</span><span class=p>(</span><span class=s>mylib_type</span> <span class=s>STREQUAL</span> <span class=s>SHARED_LIBRARY</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>target_compile_definitions</span><span class=p>(</span><span class=s>mylib</span> <span class=s>PUBLIC</span> <span class=s>MYLIB_SHARED</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>endif</span><span class=p>()</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>target_compile_definitions</span><span class=p>(</span><span class=s>mylib</span> <span class=s>PRIVATE</span> <span class=s>MYLIB_SOURCE</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># ---
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>add_executable</span><span class=p>(</span><span class=s>anyref</span> <span class=s>main.cpp</span><span class=p>)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=nb>target_link_libraries</span><span class=p>(</span><span class=s>anyref</span> <span class=s>mylib</span><span class=p>)</span><span class=err>
+</span></span></span></code></pre></td></tr></table></div></div><p>如果程序如期运行, 那么主程序中<code>lib_fn()</code>应输出"Hello!". 否则将输出"Bad type!".</p><h2 id=静态链接>静态链接</h2><p>当我们使用静态链接(<code>-DBUILD_SHARED_LIBS=0</code>)编译并运行测试程序, 不出意外, 在各个平台都测试成功. 程序输出了两次"Hello!".</p><h2 id=动态链接>动态链接</h2><p>这里我们先给出结果:</p><p>(TODO: 等我有空了把<del>macOS</del>和MinGW补上)</p><h3 id=windows-11-msvc>Windows 11, MSVC</h3><p>结果为失败. 通过debugger或手动print能看出, <code>inline</code>变量<code>any_ref_helper</code>在主程序和动态库中的地址确实不同.</p><p><img src=/p/any_ref-without-rtti/win-dynlib.png width=901 height=294 srcset="/p/any_ref-without-rtti/win-dynlib_hu_56154634601a5e37.png 480w, /p/any_ref-without-rtti/win-dynlib_hu_aacd87efe43b97c9.png 1024w" loading=lazy alt=Windows动态链接 class=gallery-image data-flex-grow=306 data-flex-basis=735px> <img src=/p/any_ref-without-rtti/win-staticlib.png width=891 height=296 srcset="/p/any_ref-without-rtti/win-staticlib_hu_677555d25180fe4.png 480w, /p/any_ref-without-rtti/win-staticlib_hu_b0babfe623900a3a.png 1024w" loading=lazy alt=Windows静态链接 class=gallery-image data-flex-grow=301 data-flex-basis=722px></p><h3 id=linux-gcc-glibc>Linux, GCC, glibc</h3><p>实际测试平台是Fedora 42 和 Ubuntu 20.04. 编译器是GCC 15 和 GCC 9.</p><p>结果为成功.</p><h3 id=linux-gcc-musl>Linux, GCC, musl</h3><p>测试平台是Alpine Linux, GCC 14.</p><p>结果为成功.</p><p><img src=/p/any_ref-without-rtti/alpine.png width=599 height=374 srcset="/p/any_ref-without-rtti/alpine_hu_95670d1d88369c19.png 480w, /p/any_ref-without-rtti/alpine_hu_8c238a46933768f5.png 1024w" loading=lazy alt="Alpine, musl" class=gallery-image data-flex-grow=160 data-flex-basis=384px></p><h3 id=linux-clang-glibc>Linux, Clang, glibc</h3><p>实际测试平台是Fedora 42 和 Ubuntu 20.04. 编译器是Clang 20 和 Clang 12.</p><p>结果为成功.</p><h3 id=linux-但-fvisibilityhidden>Linux, 但<code>-fvisibility=hidden</code></h3><ul><li>Clang 结果均为失败.</li><li>所有 GCC 结果仍为成功.</li></ul><h3 id=macos-26-apple-clang-17>macOS 26, Apple clang 17</h3><ul><li><p><code>-fvisibility=hidden</code>则失败, 否则成功. 如图</p><p><img src=/p/any_ref-without-rtti/macos-dynlib.png width=1071 height=613 srcset="/p/any_ref-without-rtti/macos-dynlib_hu_9ea121b4ab77ec1e.png 480w, /p/any_ref-without-rtti/macos-dynlib_hu_83fa96d5191ed44f.png 1024w" loading=lazy alt="macOS, Clang" class=gallery-image data-flex-grow=174 data-flex-basis=419px></p></li></ul><h1 id=结果解读>结果解读</h1><h2 id=linux>Linux</h2><p>用<code>nm</code>查看编译出的二进制文件, 可以看到符号导出情况:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-gdscript3 data-lang=gdscript3><span class=line><span class=cl><span class=c1># 略去了无关的符号</span>
+</span></span><span class=line><span class=cl><span class=c1># Clang:</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>CD</span> <span class=n>libmylib</span><span class=o>.</span><span class=n>so</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000000380</span> <span class=n>T</span> <span class=n>lib_fn</span><span class=p>(</span><span class=n>AnyRef</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000003044</span> <span class=n>V</span> <span class=n>detail</span><span class=p>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>std</span><span class=p>::</span><span class=n>__cxx11</span><span class=p>::</span><span class=n>basic_string</span><span class=o>&lt;</span><span class=n>char</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>char_traits</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>allocator</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span> <span class=o>&gt;</span> <span class=k>const</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>CD</span> <span class=n>anyref</span>
+</span></span><span class=line><span class=cl>                 <span class=n>U</span> <span class=n>lib_fn</span><span class=p>(</span><span class=n>AnyRef</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000403194</span> <span class=n>V</span> <span class=n>detail</span><span class=p>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>std</span><span class=p>::</span><span class=n>__cxx11</span><span class=p>::</span><span class=n>basic_string</span><span class=o>&lt;</span><span class=n>char</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>char_traits</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>allocator</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span> <span class=o>&gt;</span> <span class=k>const</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Clang, -fvisibility=hidden:</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>CD</span> <span class=n>libmylib</span><span class=o>.</span><span class=n>so</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000000380</span> <span class=n>T</span> <span class=n>lib_fn</span><span class=p>(</span><span class=n>AnyRef</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>CD</span> <span class=n>anyref</span>
+</span></span><span class=line><span class=cl>                 <span class=n>U</span> <span class=n>lib_fn</span><span class=p>(</span><span class=n>AnyRef</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># GCC:</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>CD</span> <span class=n>libmylib</span><span class=o>.</span><span class=n>so</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000000440</span> <span class=n>T</span> <span class=n>lib_fn</span><span class=p>(</span><span class=n>AnyRef</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000003044</span> <span class=n>u</span> <span class=n>detail</span><span class=p>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>std</span><span class=p>::</span><span class=n>__cxx11</span><span class=p>::</span><span class=n>basic_string</span><span class=o>&lt;</span><span class=n>char</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>char_traits</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>allocator</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span> <span class=o>&gt;</span> <span class=k>const</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>CD</span> <span class=n>anyref</span>
+</span></span><span class=line><span class=cl>                 <span class=n>U</span> <span class=n>lib_fn</span><span class=p>(</span><span class=n>AnyRef</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000403194</span> <span class=n>u</span> <span class=n>detail</span><span class=p>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>std</span><span class=p>::</span><span class=n>__cxx11</span><span class=p>::</span><span class=n>basic_string</span><span class=o>&lt;</span><span class=n>char</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>char_traits</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>allocator</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span> <span class=o>&gt;</span> <span class=k>const</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># GCC, -fvisibility=hidden:</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>CD</span> <span class=n>libmylib</span><span class=o>.</span><span class=n>so</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000000440</span> <span class=n>T</span> <span class=n>lib_fn</span><span class=p>(</span><span class=n>AnyRef</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000003044</span> <span class=n>u</span> <span class=n>detail</span><span class=p>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>std</span><span class=p>::</span><span class=n>__cxx11</span><span class=p>::</span><span class=n>basic_string</span><span class=o>&lt;</span><span class=n>char</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>char_traits</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>allocator</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span> <span class=o>&gt;</span> <span class=k>const</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>CD</span> <span class=n>anyref</span>
+</span></span><span class=line><span class=cl>                 <span class=n>U</span> <span class=n>lib_fn</span><span class=p>(</span><span class=n>AnyRef</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000403194</span> <span class=n>u</span> <span class=n>detail</span><span class=p>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>std</span><span class=p>::</span><span class=n>__cxx11</span><span class=p>::</span><span class=n>basic_string</span><span class=o>&lt;</span><span class=n>char</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>char_traits</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>allocator</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span> <span class=o>&gt;</span> <span class=k>const</span><span class=o>&gt;</span>
+</span></span></code></pre></td></tr></table></div></div><p>根据<code>man nm</code>:</p><blockquote><p>&ldquo;V&rdquo;, &ldquo;v&rdquo;: The symbol is a weak object. When a weak defined symbol is linked with a normal defined symbol, the normal defined symbol is used with no error. When a weak undefined symbol is linked and the symbol is not defined, the value of the weak symbol becomes zero with no error. On some systems, uppercase indicates that a default value has been specified.<br>&ldquo;u&rdquo;: The symbol is a unique global symbol. <strong>This is a GNU extension to the standard set of ELF symbol. For such a symbol the dynamic linker will make sure that in the entire process there is just one symbol with this name and type in use</strong>.</p></blockquote><h3 id=clang>Clang</h3><p>可以看出, Clang编译出的二进制中, 动态库和主程序均将<code>any_ref_helper</code>导出为一个weak symbol.</p><p>来自多个链接单元(这里就是我们测试的库<code>mylib</code>和主程序<code>anyref</code>)的同名weak symbol, 在(动态)链接时会统一选用其中的一个(一般是按顺序的第一个. 如果存在一个同名的strong symbol, 就总是选择strong symbol).</p><p>对于定义为<code>inline</code>的对象, 只要保证在各处的定义相同, 这么做就相当于使它们有了统一的定义, 且均指向其中某一个链接单元内的实例. 例如在我们的程序中, 如果动态链接下最终选择了<code>libmylib.so</code>中的weak symbol, 主程序也会使用来自<code>libmylib.so</code>的<code>any_ref_helper</code>定义.</p><p>(需要注意一点, 显然只有经过单态化后, <code>any_ref_helper&lt;T></code>才可能被导出为symbol, 不然它只是一个模板.
+在我们的测试项目中, <code>any_ref_helper</code>只以<code>const std::string</code>作为模板类型被单态化了, 且被定义了2次, 分别在<code>mylib</code>和主程序中.
+因此, 链接时可能选择其中的任意一个.)</p><h3 id=gcc>GCC</h3><p>根据上面引用的man page, GCC则是使用了一个非标准ELF符号类型, 也就是<code>nm</code>输出的"u". 这种符号专门用于保证整个进程中符号所代表对象的唯一性.</p><p>可以看到, 测试的动态库和主程序中均含有这种类型的symbol对应<code>any_ref_helper</code>. 因此, 链接时能确保两者引用的<code>any_ref_helper</code>是同一个对象, 具有相同的地址.</p><h3 id=-fvisibilityhidden><code>-fvisibility=hidden</code></h3><p>众所周知, Linux下大部分编译器在编译动态库时的默认设置都是导出所有<em>具有external linkage的</em>对象. (参看: <a class=link href=https://gcc.gnu.org/wiki/Visibility target=_blank rel=noopener>https://gcc.gnu.org/wiki/Visibility</a>)</p><p>利用选项<code>-fvisibility=hidden</code>, 可将默认的符号可见性设为不可见, 除非用<code>__attribute__((visibility("default")))</code>特别标注为需要导出. 这样做后的行为就和Windows平台上类似了.</p><p>在我们的例子中, Clang由于<code>any_ref_helper</code>是external linkage, 且默认visibility为可见, 就将它导出为了一个weak symbol. 而当我们启用<code>-fvisibility=hidden</code>后, Clang就不再导出这个weak symbol了, 因而主程序和动态库会各自使用自己内部的<code>any_ref_helper</code>, 测试结果失败.</p><p>而对于使用了特殊符号"u"来实现<code>inline</code>唯一性的GCC来说, visibility设置就没有影响了, 因为这种symbol只是用于确保唯一性, 不应受visibility影响.</p><h2 id=windows>Windows</h2><p>Windows的PE可执行格式中, COMDAT用于合并多个编译单元内的同一<code>inline</code>对象, 保证它们的唯一性, 即COMDAT folding.</p><p>但是, 这个合并仅作用于<strong>组成单个PE文件的多个编译单元</strong>, 而DLL文件算作一个单独的module, 在编译链接DLL时, 它内部的COMDAT区域就已经固定. 运行时动态链接该DLL时, 不会再将它的COMDAT与调用程序的COMDAT合并.</p><p>因此, 对于我们的测试程序, <code>mylib.dll</code>中的<code>any_ref_helper</code>和主程序中的并不是同一个对象, 而是属于各自内部, 具有不同的地址, 所以测试失败.</p><h3 id=导出符号>导出符号</h3><p>如果我们需要确保唯一性的<code>inline</code>变量只是一个普通变量, 并不是一个会以任意类型单态化的模板, 那么解决方法就是仅在一个DLL导出这个变量(声明为<code>__declspec(dllexport)</code>), 其它地方, 包括调用这个DLL的程序或其它DLL, 均声明为<code>__declspec(dllimport)</code>.</p><p>但是, <code>AnyRef</code>中使用的<code>inline</code>变量模板无法提供所有可能类型的单态化, 并不适用这个做法.</p><h2 id=macos>macOS</h2><p>macOS上的结果和Linux+Clang是类似的. <code>nm</code>的结果:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-gdscript3 data-lang=gdscript3><span class=line><span class=cl><span class=c1># 默认</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>C</span> <span class=n>libmylib</span><span class=o>.</span><span class=n>dylib</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000008000</span> <span class=n>D</span> <span class=n>detail</span><span class=p>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>basic_string</span><span class=o>&lt;</span><span class=n>char</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>char_traits</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>allocator</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;&gt;</span> <span class=k>const</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>C</span> <span class=n>anyref</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000100008000</span> <span class=n>D</span> <span class=n>detail</span><span class=p>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>basic_string</span><span class=o>&lt;</span><span class=n>char</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>char_traits</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>allocator</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;&gt;</span> <span class=k>const</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># -fvisibility=hidden</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>C</span> <span class=n>libmylib</span><span class=o>.</span><span class=n>dylib</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000000008000</span> <span class=n>d</span> <span class=n>detail</span><span class=p>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>basic_string</span><span class=o>&lt;</span><span class=n>char</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>char_traits</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>allocator</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;&gt;</span> <span class=k>const</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=o>$</span> <span class=n>nm</span> <span class=o>-</span><span class=n>C</span> <span class=n>anyref</span>
+</span></span><span class=line><span class=cl><span class=mi>0000000100008000</span> <span class=n>d</span> <span class=n>detail</span><span class=p>::</span><span class=n>any_ref_helper</span><span class=o>&lt;</span><span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>basic_string</span><span class=o>&lt;</span><span class=n>char</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>char_traits</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;</span><span class=p>,</span> <span class=n>std</span><span class=p>::</span><span class=n>__1</span><span class=p>::</span><span class=n>allocator</span><span class=o>&lt;</span><span class=n>char</span><span class=o>&gt;&gt;</span> <span class=k>const</span><span class=o>&gt;</span>
+</span></span></code></pre></td></tr></table></div></div><p><code>D</code>或<code>d</code>表示可执行文件data section中的符号, 区别是前者为外部可见的符号, 后者是仅在当前对象文件内. 实际上, 多个重复的<code>D</code>定义的行为类似于weak symbol, 因此保证了<code>any_ref_helper</code>地址的一致性. 对于<code>d</code>, 就没有这个保证了.</p><h2 id=结论>结论</h2><p>简而言之,</p><ul><li><code>any_ref</code>的非RTTI实现需要依赖<code>inline</code>对象的地址唯一性, 但这个唯一性只对单个"程序"保证.</li><li>一般而言, 动态链接库是一个单独的可执行image.</li><li>但是, 在一些平台/编译器上, 存在一些机制能够跨动态链接边界"打洞", 提供一些额外的保证.</li></ul></section><footer class=article-footer><section class=article-tags><a href=/tags/c++/>C++</a>
+<a href=/tags/linker/>Linker</a>
+<a href=/tags/compiler/>Compiler</a>
+<a href=/tags/cross-platform/>Cross-Platform</a></section><section class=article-copyright><svg class="icon icon-tabler icon-tabler-copyright" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="12" cy="12" r="9"/><path d="M14.5 9a3.5 4 0 100 6"/></svg>
+<span>Licensed under CC BY-NC-SA 4.0</span></section><section class=article-lastmod><svg class="icon icon-tabler icon-tabler-clock" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+<span>Last updated on Nov 24, 2025 00:00 UTC</span></section></footer></article><div class=disqus-container></div><style>.disqus-container{background-color:var(--card-background);border-radius:var(--card-border-radius);box-shadow:var(--shadow-l1);padding:var(--card-padding)}</style><script>window.addEventListener("onColorSchemeChange",e=>{typeof DISQUS=="object"&&DISQUS.reset({reload:!0})})</script><footer class=site-footer><section class=copyright>&copy;
+2020 -
+2026 Kya's Blog</section><section class=powerby>Built with <a href=https://gohugo.io/ target=_blank rel=noopener>Hugo</a><br>Theme <b><a href=https://github.com/CaiJimmy/hugo-theme-stack target=_blank rel=noopener data-version=3.31.0>Stack</a></b> designed by <a href=https://jimmycai.com target=_blank rel=noopener>Jimmy</a></section></footer><div class=pswp tabindex=-1 role=dialog aria-hidden=true><div class=pswp__bg></div><div class=pswp__scroll-wrap><div class=pswp__container><div class=pswp__item></div><div class=pswp__item></div><div class=pswp__item></div></div><div class="pswp__ui pswp__ui--hidden"><div class=pswp__top-bar><div class=pswp__counter></div><button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+<button class="pswp__button pswp__button--share" title=Share></button>
+<button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+<button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button><div class=pswp__preloader><div class=pswp__preloader__icn><div class=pswp__preloader__cut><div class=pswp__preloader__donut></div></div></div></div></div><div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap"><div class=pswp__share-tooltip></div></div><button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+</button>
+<button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)"></button><div class=pswp__caption><div class=pswp__caption__center></div></div></div></div></div><script src=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js integrity="sha256-ePwmChbbvXbsO02lbM3HoHbSHTHFAeChekF1xKJdleo=" crossorigin=anonymous defer></script><script src=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js integrity="sha256-UKkzOn/w1mBxRmLLGrSeyB4e1xbrp4xylgAWb3M42pU=" crossorigin=anonymous defer></script><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.min.css crossorigin=anonymous><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.css crossorigin=anonymous></main></div><script src=https://cdn.jsdelivr.net/npm/node-vibrant@3.1.6/dist/vibrant.min.js integrity="sha256-awcR2jno4kI5X0zL8ex0vi2z+KMkF24hUW8WePSA9HM=" crossorigin=anonymous></script><script type=text/javascript src=/ts/main.1e9a3bafd846ced4c345d084b355fb8c7bae75701c338f8a1f8a82c780137826.js defer></script><script>(function(){const e=document.createElement("link");e.href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap",e.type="text/css",e.rel="stylesheet",document.head.appendChild(e)})()</script></body></html>

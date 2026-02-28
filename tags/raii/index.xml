@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>RAII on Kya's Blog</title><link>https://kya8.github.io/tags/raii/</link><description>Recent content in RAII on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Wed, 18 Jan 2023 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/raii/index.xml" rel="self" type="application/rss+xml"/><item><title>Rule of 0/3/5</title><link>https://kya8.github.io/p/rule-of-0/3/5/</link><pubDate>Wed, 18 Jan 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/rule-of-0/3/5/</guid><description>&lt;h1 id="the-rule-of-035"&gt;The rule of 0/3/5
+&lt;/h1&gt;&lt;p&gt;A C++ class that manages some non-RAII resource/object (e.g., &lt;code&gt;FILE*&lt;/code&gt;) would require a user-defined dtor.
+Also, such resource generically cannot be copied plainly. Most of the time, this either disallows copying, or requires special handling.&lt;/p&gt;
+&lt;p&gt;Such classes are direct (i.e. it doesn&amp;rsquo;t contain another RAII wrapper object), exclusive resource managers.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;On the other hand, if a class is not one of such classes, it should not have custom destructors, copy/move constructors or copy/move assignment operators.
+Let RAII do its thing! Only the lowest-level resource manager classes (where all the special handling actually happens) would need those.&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;With these in mind, the rule of 0/3/5 becomes obvious:&lt;/p&gt;
+&lt;h2 id="rule-of-three"&gt;Rule of three
+&lt;/h2&gt;&lt;p&gt;If a class requires a user-defined destructor, a user-defined copy constructor, or a user-defined copy assignment operator, it almost certainly requires all three!
+Because it certainly manages some non-RAII resource handle, otherwise it wouldn&amp;rsquo;t require those.&lt;/p&gt;
+&lt;h2 id="rule-of-zero"&gt;Rule of zero
+&lt;/h2&gt;&lt;p&gt;Classes that have custom destructors, copy/move constructors or copy/move assignment operators should deal exclusively with ownership (which follows from the Single Responsibility Principle). Other classes should not have custom destructors, copy/move constructors or copy/move assignment operators.&lt;/p&gt;
+&lt;p&gt;This rule also appears in the C++ Core Guidelines: If you can avoid defining default operations, do.&lt;/p&gt;
+&lt;h2 id="rule-of-five"&gt;Rule of five
+&lt;/h2&gt;&lt;p&gt;Because the presence of a user-defined destructor, copy-constructor, or copy-assignment operator prevents implicit definition of the move constructor and the move assignment operator,
+any class for which move semantics are desirable, has to declare all five special member functions.&lt;/p&gt;
+&lt;p&gt;Unlike Rule of Three, failing to provide move constructor and move assignment is usually not an error, but a missed optimization opportunity.&lt;/p&gt;</description></item></channel></rss>
