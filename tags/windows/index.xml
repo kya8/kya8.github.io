@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Windows on Kya's Blog</title><link>https://kya8.github.io/tags/windows/</link><description>Recent content in Windows on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Sun, 06 Jul 2025 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/windows/index.xml" rel="self" type="application/rss+xml"/><item><title>Qemu Windows客户机最佳实践</title><link>https://kya8.github.io/p/qemu-windows%E5%AE%A2%E6%88%B7%E6%9C%BA%E6%9C%80%E4%BD%B3%E5%AE%9E%E8%B7%B5/</link><pubDate>Tue, 12 Mar 2024 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/qemu-windows%E5%AE%A2%E6%88%B7%E6%9C%BA%E6%9C%80%E4%BD%B3%E5%AE%9E%E8%B7%B5/</guid><description>&lt;p&gt;(这只是一个记录贴. 最近又需要在Linux机器上弄一台Windows开发虚拟机, 遂翻出了几年前的记录, 并针对较新的Qemu版本做了一些更新.)&lt;/p&gt;
+&lt;h1 id="tldr"&gt;TL;DR
+&lt;/h1&gt;&lt;p&gt;Qemu命令行参数:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt; 1
+&lt;/span&gt;&lt;span class="lnt"&gt; 2
+&lt;/span&gt;&lt;span class="lnt"&gt; 3
+&lt;/span&gt;&lt;span class="lnt"&gt; 4
+&lt;/span&gt;&lt;span class="lnt"&gt; 5
+&lt;/span&gt;&lt;span class="lnt"&gt; 6
+&lt;/span&gt;&lt;span class="lnt"&gt; 7
+&lt;/span&gt;&lt;span class="lnt"&gt; 8
+&lt;/span&gt;&lt;span class="lnt"&gt; 9
+&lt;/span&gt;&lt;span class="lnt"&gt;10
+&lt;/span&gt;&lt;span class="lnt"&gt;11
+&lt;/span&gt;&lt;span class="lnt"&gt;12
+&lt;/span&gt;&lt;span class="lnt"&gt;13
+&lt;/span&gt;&lt;span class="lnt"&gt;14
+&lt;/span&gt;&lt;span class="lnt"&gt;15
+&lt;/span&gt;&lt;span class="lnt"&gt;16
+&lt;/span&gt;&lt;span class="lnt"&gt;17
+&lt;/span&gt;&lt;span class="lnt"&gt;18
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-shell" data-lang="shell"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;qemu-system-x86_64 -accel kvm -machine q35 -name windows &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-cpu host,hv_relaxed,hv_spinlocks&lt;span class="o"&gt;=&lt;/span&gt;0x1fff,hv_vapic,hv_vpindex,hv_synic,hv_time,hv_stimer,hv_tlbflush,hv_tlbflush_ext,hv_ipi,hv_stimer_direct,hv_runtime,hv_frequencies,hv_reenlightenment,hv_avic,hv_xmm_input,hv_evmcs &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-smp &lt;span class="nv"&gt;sockets&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;1,cores&lt;span class="o"&gt;=&lt;/span&gt;8,threads&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="m"&gt;1&lt;/span&gt; &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-m 8G &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-rtc &lt;span class="nv"&gt;base&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;localtime &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-drive &lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;pflash,format&lt;span class="o"&gt;=&lt;/span&gt;raw,readonly&lt;span class="o"&gt;=&lt;/span&gt;on,file&lt;span class="o"&gt;=&lt;/span&gt;OVMF_CODE.fd -drive &lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;pflash,format&lt;span class="o"&gt;=&lt;/span&gt;raw,file&lt;span class="o"&gt;=&lt;/span&gt;OVMF_VARS.fd &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-device virtio-balloon &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-vga none -device virtio-vga &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;# qxl: -device qxl-vga,xres=1920,yres=1080,vgamem_mb=32&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-audiodev pipewire,id&lt;span class="o"&gt;=&lt;/span&gt;snd0 -device ich9-intel-hda -device hda-output,audiodev&lt;span class="o"&gt;=&lt;/span&gt;snd0 &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-device qemu-xhci,id&lt;span class="o"&gt;=&lt;/span&gt;xhci -device usb-tablet &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-drive &lt;span class="nv"&gt;file&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;disk0.qcow2,if&lt;span class="o"&gt;=&lt;/span&gt;virtio,discard&lt;span class="o"&gt;=&lt;/span&gt;unmap &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-nic user,model&lt;span class="o"&gt;=&lt;/span&gt;virtio-net-pci,guestfwd&lt;span class="o"&gt;=&lt;/span&gt;tcp::1080-tcp:127.0.0.1:1080 &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;# virtiofs share&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-object memory-backend-memfd,id&lt;span class="o"&gt;=&lt;/span&gt;mem,size&lt;span class="o"&gt;=&lt;/span&gt;8G,share&lt;span class="o"&gt;=&lt;/span&gt;on -numa node,memdev&lt;span class="o"&gt;=&lt;/span&gt;mem -chardev socket,id&lt;span class="o"&gt;=&lt;/span&gt;char0,path&lt;span class="o"&gt;=&lt;/span&gt;/tmp/vm-share -device vhost-user-fs-pci,chardev&lt;span class="o"&gt;=&lt;/span&gt;char0,tag&lt;span class="o"&gt;=&lt;/span&gt;my-share &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;# For installing Windows&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-drive &lt;span class="nv"&gt;file&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;windows.iso,index&lt;span class="o"&gt;=&lt;/span&gt;2,media&lt;span class="o"&gt;=&lt;/span&gt;cdrom &lt;span class="se"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-drive &lt;span class="nv"&gt;file&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;virtio-win.iso,index&lt;span class="o"&gt;=&lt;/span&gt;3,media&lt;span class="o"&gt;=&lt;/span&gt;cdrom
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;Virtiofsd:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-shell" data-lang="shell"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;/usr/libexec/virtiofsd --socket-path&lt;span class="o"&gt;=&lt;/span&gt;/tmp/virtiofs-share.sock --shared-dir /path/to/shared/dir
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;h1 id="关于qemu命令行"&gt;关于Qemu命令行
+&lt;/h1&gt;&lt;p&gt;推荐阅读: &lt;a class="link" href="https://archive.fosdem.org/2018/schedule/event/vai_qemu_jungle/" target="_blank" rel="noopener"
+&gt;https://archive.fosdem.org/2018/schedule/event/vai_qemu_jungle/&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Qemu的一些选项经常让新手困惑, 主要原因其实就是:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;Qemu模拟的每个虚拟设备都由host backend和guest device两部分组成. 两部分一般用一个名字(id)相联系.
+诸如&lt;code&gt;-nic&lt;/code&gt;, &lt;code&gt;-drive&lt;/code&gt;之类的选项只是为了便利提供的shortcut, 能够同时配置两部分.&lt;/p&gt;
+&lt;p&gt;例如, &lt;code&gt;-nic user,model=virtio-net-pci&lt;/code&gt;的完整写法是&lt;code&gt;--device virtio-net-pci,netdev=n1 --netdev user,id=n1&lt;/code&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Qemu的一个system emulator一般会有一些默认模拟的设备, 即使不加任何命令行参数都会被模拟. 例如, x86的system emulator默认会模拟一个vga显卡等.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h1 id="参数说明"&gt;参数说明
+&lt;/h1&gt;&lt;h2 id="芯片组和cpu"&gt;芯片组和CPU
+&lt;/h2&gt;&lt;p&gt;x86-64上一般使用q35机型即可.
+&lt;code&gt;-cpu host&lt;/code&gt;表示使用主机的CPU型号, 并且会开启对应的指令集支持. 后面的一串&lt;code&gt;hv_*&lt;/code&gt;是hyper-v enlightments, 适用于Windows客户机.&lt;/p&gt;
+&lt;p&gt;用&lt;code&gt;-smp&lt;/code&gt;选项可指定CPU的拓扑关系, 这里指定一枚CPU, 8个核心, 每个核心有1个线程.&lt;/p&gt;
+&lt;h2 id="uefi固件"&gt;UEFI固件
+&lt;/h2&gt;&lt;p&gt;利用OVMF提供的edk2固件, 实现UEFI启动. 一般发行版都会打包OVMF固件, 没有的话可以从网上下载.
+固件分为只读和可写两部分, 以&lt;code&gt;pflash&lt;/code&gt;形式添加.&lt;/p&gt;
+&lt;h2 id="显卡"&gt;显卡
+&lt;/h2&gt;&lt;p&gt;Qemu给x86客机默认模拟的是一个基本的VGA设备, 足以用于Windows客机显示.
+除此之外可选的是&lt;code&gt;virtio-vga&lt;/code&gt;和&lt;code&gt;qxl-vga&lt;/code&gt;. 前者可选择OpenGL加速(基于API转发, 目前对Windows无效), 后者主要用于给SPICE远程连接.&lt;/p&gt;
+&lt;p&gt;它们都是兼容VGA的, 在virtio驱动iso里包含对应的驱动. 这些Windows驱动都是DoD(Display only driver)驱动, 没有Windows上的图形加速功能, 用处不大, 功能上和基本的VGA无异.&lt;/p&gt;
+&lt;p&gt;参看: &lt;a class="link" href="https://www.kraxel.org/blog/2019/09/display-devices-in-qemu/" target="_blank" rel="noopener"
+&gt;https://www.kraxel.org/blog/2019/09/display-devices-in-qemu/&lt;/a&gt; (很有价值的blog, 来自qemu开发者)&lt;/p&gt;
+&lt;p&gt;(如果要求图形性能, 还是需要GPU直通或GPU虚拟化, 目前Qemu中没有虚拟显卡能给Windows客机提供较好的图形加速.
+不过, 我们的目的仅是一个Windows开发机, 普通的VGA显示已足够.)&lt;/p&gt;
+&lt;h2 id="声音"&gt;声音
+&lt;/h2&gt;&lt;p&gt;主机Backend部分上面选择了pipewire. 此外也可以用pulseaudio等. &lt;code&gt;-device ich9-intel-hda -device hda-output,audiodev=snd0&lt;/code&gt;添加了两个客机设备, 分别是audio controller和audio codec, 和前面的backend id对应.&lt;/p&gt;
+&lt;h2 id="usb-输入"&gt;USB, 输入
+&lt;/h2&gt;&lt;p&gt;一些芯片组(包括q35)具有自带的USB支持, 可用&lt;code&gt;-usb&lt;/code&gt;开启.
+但这里我们选择了&lt;code&gt;qemu-xhci&lt;/code&gt;, qemu实现的一个通用的USB 3.0总线设备.&lt;/p&gt;
+&lt;p&gt;鼠标输入采用&lt;code&gt;usb-tablet&lt;/code&gt;.
+tablet设备的用处类似于触摸屏, 即Qemu无需grab input, 鼠标划过Qemu显示窗口时, 就自动输入到客机桌面中.&lt;/p&gt;
+&lt;p&gt;键盘方面, Qemu的x86 system emulator会默认模拟, 不需要手动添加.&lt;/p&gt;
+&lt;h2 id="存储"&gt;存储
+&lt;/h2&gt;&lt;p&gt;直接使用一块virtio-scsi硬盘: &lt;code&gt;-drive file=disk0.qcow2,if=virtio,discard=unmap&lt;/code&gt;&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;if=virtio&lt;/code&gt;在较早版本的Qemu上应该是&lt;code&gt;virtio-blk&lt;/code&gt;驱动.
+新版本的Qemu里则默认是&lt;code&gt;virtio-scsi&lt;/code&gt;总线上的scsi硬盘, 相当于:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt;1
+&lt;/span&gt;&lt;span class="lnt"&gt;2
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-drive if=none,id=hd1,format=qcow2,file=disk0.qcow2,discard=unmap
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;-device scsi-hd,drive=hd1
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;qcow2硬盘镜像可用&lt;code&gt;qemu-img&lt;/code&gt;自行创建.&lt;/p&gt;
+&lt;h3 id="trim"&gt;TRIM
+&lt;/h3&gt;&lt;p&gt;&lt;code&gt;virtio-scsi&lt;/code&gt;以及&lt;code&gt;virtio-blk&lt;/code&gt;存储设备均支持TRIM指令(即scsi标准中的unmap), 可用&lt;code&gt;discard=unmap&lt;/code&gt;开启.
+通过这种方式, 客机能直接告知主机, 存储中的哪些部分已经不再使用, 可以释放.
+在这之前, 常见的老办法是在客机内写入一个全部为0的大文件, 直到把硬盘填满, 再把这个文件删除,
+此时硬盘上的空闲空间应该全部是0, 随后将主机上的镜像文件转为稀疏文件.&lt;/p&gt;
+&lt;p&gt;对于不同的主机存储backend, 收到来自客机的TRIM指令后的处理方式也不同.
+对于qcow2和raw镜像文件, Qemu的处理方式是给文件中被trim的空闲部分punch hole, 使之成为稀疏文件, 从而减少镜像文件的实际硬盘占用.
+这一点可用&lt;code&gt;ls -lhs&lt;/code&gt;或&lt;code&gt;du disk0.qcow2 ; du --apparent-size disk0.qcow2&lt;/code&gt;来验证.&lt;/p&gt;
+&lt;p&gt;Windows客机在删除文件时会自动trim.
+也可以使用自带的硬盘优化工具给硬盘手动trim, 其中虚拟硬盘会被显示为&amp;quot;Thin provisioned drive&amp;quot;.&lt;/p&gt;
+&lt;p&gt;&lt;img src="https://kya8.github.io/p/qemu-windows%E5%AE%A2%E6%88%B7%E6%9C%BA%E6%9C%80%E4%BD%B3%E5%AE%9E%E8%B7%B5/windows-trim.png"
+width="704"
+height="507"
+srcset="https://kya8.github.io/p/qemu-windows%E5%AE%A2%E6%88%B7%E6%9C%BA%E6%9C%80%E4%BD%B3%E5%AE%9E%E8%B7%B5/windows-trim_hu_98411f8a2bcbc196.png 480w, https://kya8.github.io/p/qemu-windows%E5%AE%A2%E6%88%B7%E6%9C%BA%E6%9C%80%E4%BD%B3%E5%AE%9E%E8%B7%B5/windows-trim_hu_77f73b88c8caf96a.png 1024w"
+loading="lazy"
+alt="Windows硬盘优化工具显示"
+class="gallery-image"
+data-flex-grow="138"
+data-flex-basis="333px"
+&gt;&lt;/p&gt;
+&lt;h3 id="安装盘"&gt;安装盘
+&lt;/h3&gt;&lt;p&gt;安装时, 我们需要以cdrom形式添加windows的安装iso, 以及包含virtio windows驱动的iso.
+安装过程中, 需要先加载virtio存储驱动, 才能看到硬盘并继续安装.&lt;/p&gt;
+&lt;h2 id="网络"&gt;网络
+&lt;/h2&gt;&lt;p&gt;如果在意网络性能, 最好是使用一个由主机上的一个虚拟interface back的tap设备.
+简便起见, 这里使用了qemu自带的user-mode networking, 作为主机backend.
+客机设备则是virtio网卡, 需要安装对应驱动.&lt;/p&gt;
+&lt;p&gt;user-mode networking自带了端口转发功能, 两个方向均可. 上面的配置是把客机发向虚拟内网中主机(网关)&lt;code&gt;1080&lt;/code&gt;端口的tcp包转发到本机的&lt;code&gt;127.0.0.1:1080&lt;/code&gt;处.&lt;/p&gt;
+&lt;h2 id="virtiofs文件共享"&gt;virtiofs文件共享
+&lt;/h2&gt;&lt;p&gt;目前Qemu上性能最好的共享文件方案就是virtiofs, 它是基于共享内存实现, 性能远高于9pfs或者其它基于网络层的方案.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;客机部分: Windows上的virtiofs文件系统驱动是用WinFsp实现, 这个相当于Windows上的FUSE, 需要在客机提前安装好.
+此外, 需要安装好virtiofs的客机驱动和服务. 这部分可以直接安装virtio驱动iso中的guest工具包.
+安装后在services.msc中找到并开启virtiofs服务即可.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;主机部分: 运行virtiofsd, 指定通讯用socket路径和共享文件路径即可;
+在对应的Qemu参数中, 配置好共享内存和socket, 并添加&lt;code&gt;vhost-user-fs-pci&lt;/code&gt;设备.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="其它"&gt;其它
+&lt;/h2&gt;&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;-rtc base=localtime&lt;/code&gt;: 由于Windows默认认为硬件时钟是本地时区. 因此将模拟的硬件时钟设为本地时区. (假设客户机的时区和本机相同)&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;-device virtio-balloon&lt;/code&gt;: ballon设备帮助qemu主进程释放客户机空闲的内存.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h1 id="结果"&gt;结果
+&lt;/h1&gt;&lt;p&gt;&lt;img src="https://kya8.github.io/p/qemu-windows%E5%AE%A2%E6%88%B7%E6%9C%BA%E6%9C%80%E4%BD%B3%E5%AE%9E%E8%B7%B5/qemu-win11.png"
+width="2052"
+height="1266"
+srcset="https://kya8.github.io/p/qemu-windows%E5%AE%A2%E6%88%B7%E6%9C%BA%E6%9C%80%E4%BD%B3%E5%AE%9E%E8%B7%B5/qemu-win11_hu_8dc0d9f33ff836d0.png 480w, https://kya8.github.io/p/qemu-windows%E5%AE%A2%E6%88%B7%E6%9C%BA%E6%9C%80%E4%BD%B3%E5%AE%9E%E8%B7%B5/qemu-win11_hu_dbd81f4e6fc0a974.png 1024w"
+loading="lazy"
+alt="运行Windows 11"
+class="gallery-image"
+data-flex-grow="162"
+data-flex-basis="389px"
+&gt;&lt;/p&gt;</description></item></channel></rss>

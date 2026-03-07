@@ -1,0 +1,176 @@
+<!doctype html><html lang=en-us dir=ltr><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><meta name=description content='CRTP CRTP是啥就不多介绍了, 总之是C++中常见的一种静态多态或Mixin的实现方式. 它的用法比较灵活, 但最常见的还是用于做Mixin和静态多态界面.\n在C++标准库中, 也能看到CRTP的使用:\nstd::enable_shared_from_this std::ranges::view_interface Mixin 这里Mixin的意思就是, 对已经实现了满足一定条件的一组方法的类, 自动实现另一组方法. 类似于Rust里的impl<T: TraitA> TraitB for T\n简单的Mixin例子:\n1 2 3 4 5 6 7 8 9 10 11 12 template<typename Derived> struct Greet { void greet() const { std::cout << "Hello, my name is " << static_cast<const Derived*>(this)->name() << &#39;\\n&#39;; } }; struct Bob : Greet<Bob> { std::string_view name() const { return "Bob"; } }; 对于任何实现了name()方法的类, 只要继承Greet, 就能直接获得greet()方法, 而greet()中会用到name(). CRTP的核心思想其实就是: 通过静态的模板参数, Greet这个Mixin类可获取到实际需要Mixin的子类, 并调用其方法.\n静态多态界面 例子:\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 template<typename Derived> struct Interface { decltype(auto) interface() { return static_cast<Derived*>(this)->implementation(); } }; struct MyImpl { void implementation() { std::cout << "Hello!\\n"; } }; template<typename Derived> void use_interface(Interface<Derived>& a) { a.implementation(); } 这里, Interface<Derived>作为静态界面的基类, 任何实现了implementation()方法的类继承于它, 就能通过Interface的引用访问interface(), 并静态派发到具体的implementation()上.\n'><title>CRTP的各种姿势</title><link rel=canonical href=https://kya8.github.io/p/crtp%E7%9A%84%E5%90%84%E7%A7%8D%E5%A7%BF%E5%8A%BF/><link rel=stylesheet href=/scss/style.min.8659d82dbe8d0fe183ef22445ed42765c7d1d996ae5b4a02725eda69426286da.css><meta property='og:title' content="CRTP的各种姿势"><meta property='og:description' content='CRTP CRTP是啥就不多介绍了, 总之是C++中常见的一种静态多态或Mixin的实现方式. 它的用法比较灵活, 但最常见的还是用于做Mixin和静态多态界面.\n在C++标准库中, 也能看到CRTP的使用:\nstd::enable_shared_from_this std::ranges::view_interface Mixin 这里Mixin的意思就是, 对已经实现了满足一定条件的一组方法的类, 自动实现另一组方法. 类似于Rust里的impl<T: TraitA> TraitB for T\n简单的Mixin例子:\n1 2 3 4 5 6 7 8 9 10 11 12 template<typename Derived> struct Greet { void greet() const { std::cout << "Hello, my name is " << static_cast<const Derived*>(this)->name() << &#39;\\n&#39;; } }; struct Bob : Greet<Bob> { std::string_view name() const { return "Bob"; } }; 对于任何实现了name()方法的类, 只要继承Greet, 就能直接获得greet()方法, 而greet()中会用到name(). CRTP的核心思想其实就是: 通过静态的模板参数, Greet这个Mixin类可获取到实际需要Mixin的子类, 并调用其方法.\n静态多态界面 例子:\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 template<typename Derived> struct Interface { decltype(auto) interface() { return static_cast<Derived*>(this)->implementation(); } }; struct MyImpl { void implementation() { std::cout << "Hello!\\n"; } }; template<typename Derived> void use_interface(Interface<Derived>& a) { a.implementation(); } 这里, Interface<Derived>作为静态界面的基类, 任何实现了implementation()方法的类继承于它, 就能通过Interface的引用访问interface(), 并静态派发到具体的implementation()上.\n'><meta property='og:url' content='https://kya8.github.io/p/crtp%E7%9A%84%E5%90%84%E7%A7%8D%E5%A7%BF%E5%8A%BF/'><meta property='og:site_name' content="Kya's Blog"><meta property='og:type' content='article'><meta property='article:section' content='Post'><meta property='article:tag' content='c++'><meta property='article:tag' content='template metaprogramming'><meta property='article:published_time' content='2025-01-10T00:00:00+00:00'><meta property='article:modified_time' content='2025-01-10T00:00:00+00:00'><meta name=twitter:title content="CRTP的各种姿势"><meta name=twitter:description content='CRTP CRTP是啥就不多介绍了, 总之是C++中常见的一种静态多态或Mixin的实现方式. 它的用法比较灵活, 但最常见的还是用于做Mixin和静态多态界面.\n在C++标准库中, 也能看到CRTP的使用:\nstd::enable_shared_from_this std::ranges::view_interface Mixin 这里Mixin的意思就是, 对已经实现了满足一定条件的一组方法的类, 自动实现另一组方法. 类似于Rust里的impl<T: TraitA> TraitB for T\n简单的Mixin例子:\n1 2 3 4 5 6 7 8 9 10 11 12 template<typename Derived> struct Greet { void greet() const { std::cout << "Hello, my name is " << static_cast<const Derived*>(this)->name() << &#39;\\n&#39;; } }; struct Bob : Greet<Bob> { std::string_view name() const { return "Bob"; } }; 对于任何实现了name()方法的类, 只要继承Greet, 就能直接获得greet()方法, 而greet()中会用到name(). CRTP的核心思想其实就是: 通过静态的模板参数, Greet这个Mixin类可获取到实际需要Mixin的子类, 并调用其方法.\n静态多态界面 例子:\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 template<typename Derived> struct Interface { decltype(auto) interface() { return static_cast<Derived*>(this)->implementation(); } }; struct MyImpl { void implementation() { std::cout << "Hello!\\n"; } }; template<typename Derived> void use_interface(Interface<Derived>& a) { a.implementation(); } 这里, Interface<Derived>作为静态界面的基类, 任何实现了implementation()方法的类继承于它, 就能通过Interface的引用访问interface(), 并静态派发到具体的implementation()上.\n'></head><body class=article-page><script>(function(){const e="StackColorScheme";localStorage.getItem(e)||localStorage.setItem(e,"auto")})()</script><script>(function(){const t="StackColorScheme",e=localStorage.getItem(t),n=window.matchMedia("(prefers-color-scheme: dark)").matches===!0;e=="dark"||e==="auto"&&n?document.documentElement.dataset.scheme="dark":document.documentElement.dataset.scheme="light"})()</script><div class="container main-container flex on-phone--column extended"><aside class="sidebar left-sidebar sticky"><button class="hamburger hamburger--spin" type=button id=toggle-menu aria-label="Toggle Menu">
+<span class=hamburger-box><span class=hamburger-inner></span></span></button><header><div class=site-meta><h1 class=site-name><a href=/>Kya's Blog</a></h1><h2 class=site-description></h2></div></header><ol class=menu-social><li><a href=https://github.com/kya8 target=_blank title=GitHub rel=me><svg class="icon icon-tabler icon-tabler-brand-github" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6.0 00-1.3-3.2 4.2 4.2.0 00-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3.0 00-6.2.0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2.0 00-.1 3.2A4.6 4.6.0 004 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg></a></li></ol><ol class=menu id=main-menu><li><a href=/><svg class="icon icon-tabler icon-tabler-home" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><polyline points="5 12 3 12 12 3 21 12 19 12"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/><path d="M9 21v-6a2 2 0 012-2h2a2 2 0 012 2v6"/></svg>
+<span>Home</span></a></li><li><a href=/archives/><svg class="icon icon-tabler icon-tabler-archive" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><rect x="3" y="4" width="18" height="4" rx="2"/><path d="M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+<span>Archives</span></a></li><li><a href=/search/><svg class="icon icon-tabler icon-tabler-search" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15" y2="15"/></svg>
+<span>Search</span></a></li><li class=menu-bottom-section><ol class=menu><li id=dark-mode-toggle><svg class="icon icon-tabler icon-tabler-toggle-left" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="8" cy="12" r="2"/><rect x="2" y="6" width="20" height="12" rx="6"/></svg>
+<svg class="icon icon-tabler icon-tabler-toggle-right" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="16" cy="12" r="2"/><rect x="2" y="6" width="20" height="12" rx="6"/></svg>
+<span>Dark Mode</span></li></ol></li></ol></aside><aside class="sidebar right-sidebar sticky"><section class="widget archives"><div class=widget-icon><svg class="icon icon-tabler icon-tabler-hash" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><line x1="5" y1="9" x2="19" y2="9"/><line x1="5" y1="15" x2="19" y2="15"/><line x1="11" y1="4" x2="7" y2="20"/><line x1="17" y1="4" x2="13" y2="20"/></svg></div><h2 class="widget-title section-title">Table of contents</h2><div class=widget--toc><nav id=TableOfContents><ol><li><a href=#crtp>CRTP</a><ol><li><a href=#mixin>Mixin</a></li><li><a href=#静态多态界面>静态多态界面</a></li></ol></li><li><a href=#c23-deducing-this>C++23 deducing this</a></li><li><a href=#防止错误使用>防止错误使用</a><ol><li><a href=#private-constructor--friend>Private constructor + friend</a></li><li><a href=#static_assert-is_base_of>static_assert is_base_of</a></li></ol></li><li><a href=#未完待续>(未完待续)</a></li></ol></nav></div></section></aside><main class="main full-width"><article class=main-article><header class=article-header><div class=article-details><div class=article-title-wrapper><h2 class=article-title><a href=/p/crtp%E7%9A%84%E5%90%84%E7%A7%8D%E5%A7%BF%E5%8A%BF/>CRTP的各种姿势</a></h2></div><footer class=article-time><div><svg class="icon icon-tabler icon-tabler-calendar-time" width="56" height="56" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><path d="M11.795 21H5a2 2 0 01-2-2V7a2 2 0 012-2h12a2 2 0 012 2v4"/><circle cx="18" cy="18" r="4"/><path d="M15 3v4"/><path d="M7 3v4"/><path d="M3 11h16"/><path d="M18 16.496V18l1 1"/></svg>
+<time class=article-time--published>Jan 10, 2025</time></div><div><svg class="icon icon-tabler icon-tabler-clock" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+<time class=article-time--reading>3 minute read</time></div></footer></div></header><section class=article-content><h1 id=crtp>CRTP</h1><p>CRTP是啥就不多介绍了, 总之是C++中常见的一种静态多态或Mixin的实现方式. 它的用法比较灵活, 但最常见的还是用于做Mixin和静态多态界面.</p><p>在C++标准库中, 也能看到CRTP的使用:</p><ul><li><a class=link href=https://en.cppreference.com/w/cpp/memory/enable_shared_from_this.html target=_blank rel=noopener>std::enable_shared_from_this</a></li><li><a class=link href=https://en.cppreference.com/w/cpp/ranges/view_interface.html target=_blank rel=noopener>std::ranges::view_interface</a></li></ul><h2 id=mixin>Mixin</h2><p>这里Mixin的意思就是, 对已经实现了满足一定条件的一组方法的类, 自动实现另一组方法. 类似于Rust里的<code>impl&lt;T: TraitA> TraitB for T</code></p><p>简单的Mixin例子:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>Derived</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=k>struct</span> <span class=nc>Greet</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=nf>greet</span><span class=p>()</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>std</span><span class=o>::</span><span class=n>cout</span> <span class=o>&lt;&lt;</span> <span class=s>&#34;Hello, my name is &#34;</span> <span class=o>&lt;&lt;</span> <span class=k>static_cast</span><span class=o>&lt;</span><span class=k>const</span> <span class=n>Derived</span><span class=o>*&gt;</span><span class=p>(</span><span class=k>this</span><span class=p>)</span><span class=o>-&gt;</span><span class=n>name</span><span class=p>()</span> <span class=o>&lt;&lt;</span> <span class=sc>&#39;\n&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>struct</span> <span class=nc>Bob</span> <span class=o>:</span> <span class=n>Greet</span><span class=o>&lt;</span><span class=n>Bob</span><span class=o>&gt;</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>std</span><span class=o>::</span><span class=n>string_view</span> <span class=n>name</span><span class=p>()</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=s>&#34;Bob&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span></code></pre></td></tr></table></div></div><p>对于任何实现了<code>name()</code>方法的类, 只要继承<code>Greet</code>, 就能直接获得<code>greet()</code>方法, 而<code>greet()</code>中会用到<code>name()</code>. CRTP的核心思想其实就是: 通过静态的模板参数, <code>Greet</code>这个Mixin类可获取到实际需要Mixin的子类, 并调用其方法.</p><h2 id=静态多态界面>静态多态界面</h2><p>例子:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>Derived</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=k>struct</span> <span class=nc>Interface</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>decltype</span><span class=p>(</span><span class=k>auto</span><span class=p>)</span> <span class=n>interface</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=k>static_cast</span><span class=o>&lt;</span><span class=n>Derived</span><span class=o>*&gt;</span><span class=p>(</span><span class=k>this</span><span class=p>)</span><span class=o>-&gt;</span><span class=n>implementation</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>struct</span> <span class=nc>MyImpl</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=nf>implementation</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>std</span><span class=o>::</span><span class=n>cout</span> <span class=o>&lt;&lt;</span> <span class=s>&#34;Hello!</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>Derived</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=kt>void</span> <span class=n>use_interface</span><span class=p>(</span><span class=n>Interface</span><span class=o>&lt;</span><span class=n>Derived</span><span class=o>&gt;&amp;</span> <span class=n>a</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>a</span><span class=p>.</span><span class=n>implementation</span><span class=p>();</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>这里, <code>Interface&lt;Derived></code>作为静态界面的基类, 任何实现了<code>implementation()</code>方法的类继承于它, 就能通过<code>Interface</code>的引用访问<code>interface()</code>, 并静态派发到具体的<code>implementation()</code>上.</p><h1 id=c23-deducing-this>C++23 deducing this</h1><p>这里有必要介绍下C++23的<em>deducing this</em>新特性所带来的新CRTP写法. 这种写法下, 甚至都不能叫Curiously Recurring Template Pattern了.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>struct</span> <span class=nc>Greet_Cpp23</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>Self</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=n>greet</span><span class=p>(</span><span class=k>this</span> <span class=n>Self</span><span class=o>&amp;&amp;</span> <span class=n>self</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>std</span><span class=o>::</span><span class=n>println</span><span class=p>(</span><span class=s>&#34;Hello, my name is {}.&#34;</span><span class=p>,</span> <span class=n>std</span><span class=o>::</span><span class=n>forward</span><span class=o>&lt;</span><span class=n>Self</span><span class=o>&gt;</span><span class=p>(</span><span class=n>self</span><span class=p>).</span><span class=n>name</span><span class=p>());</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>struct</span> <span class=nc>Alice</span> <span class=o>:</span> <span class=n>Greet_Cpp23</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>const</span> <span class=k>auto</span><span class=o>&amp;</span> <span class=n>name</span><span class=p>()</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=s>&#34;Alice&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span></code></pre></td></tr></table></div></div><p>不难猜到, 如果<code>Greet_Cpp23</code>被继承, 在子类上调用<code>greet()</code>时, <code>Self</code>就会被推导为子类. 因此, 我们不再需要以子类作为模板参数了. 这种写法无疑简化了很多.</p><p>不过, 如果要用这种写法实现静态多态界面, 就不能用<code>Greet_Cpp23</code>的引用了, 如:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=kt>void</span> <span class=nf>use_greet</span><span class=p>(</span><span class=n>Greet_Cpp23</span><span class=o>&amp;</span> <span class=n>a</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>a</span><span class=p>.</span><span class=n>greet</span><span class=p>();</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>这显然不会work, 因为<code>a</code>的类型只有<code>Greet_Cpp23</code>, <code>Self</code>不会被推导为真正的子类类型, 如<code>Alice</code>.</p><p>但是, 我们可以这样写, 达到类似的约束效果:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>template</span><span class=o>&lt;</span><span class=n>std</span><span class=o>::</span><span class=n>derived_from</span><span class=o>&lt;</span><span class=n>Greet_Cpp23</span><span class=o>&gt;</span> <span class=n>T</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=kt>void</span> <span class=n>use_greet</span><span class=p>(</span><span class=k>const</span> <span class=n>T</span><span class=o>&amp;</span> <span class=n>a</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>a</span><span class=p>.</span><span class=n>greet</span><span class=p>();</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>这样就是一个不通过基类引用, 仅通过模板参数约束的泛型界面了.</p><h1 id=防止错误使用>防止错误使用</h1><p>CRTP(传统写法)如果使用不慎, 会导致<code>static_cast&lt;Derived*>(this)</code>非法. 也就是, 如果CRTP基类未以自己的一个子类为模板参数, 那么这个cast行为是危险的.</p><p>(对于Deducing this写法, 不存在cast, 因此不存在该问题.)</p><p>一般来说, 有两种方法防止错误使用CRTP:</p><h2 id=private-constructor--friend>Private constructor + friend</h2><p>把CRTP基类的构造函数设置为private, 并给模板参数里的<code>Derived</code>类friend. 这样, 就只有当这个<code>Derived</code>类继承它时, 才可能将它实例化为对象.
+如果写错模板参数, 或者单独使用这个基类, 会发现无法构造对象.</p><p>以上面的<code>Greet</code>为例:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>Derived</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=k>struct</span> <span class=nc>Greet</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=nf>greet</span><span class=p>()</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>std</span><span class=o>::</span><span class=n>cout</span> <span class=o>&lt;&lt;</span> <span class=s>&#34;Hello, my name is &#34;</span> <span class=o>&lt;&lt;</span> <span class=k>static_cast</span><span class=o>&lt;</span><span class=k>const</span> <span class=n>Derived</span><span class=o>*&gt;</span><span class=p>(</span><span class=k>this</span><span class=p>)</span><span class=o>-&gt;</span><span class=n>name</span><span class=p>()</span> <span class=o>&lt;&lt;</span> <span class=sc>&#39;\n&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=k>private</span><span class=o>:</span>
+</span></span><span class=line><span class=cl><span class=c1>// common CRTP trick to prevent misuse
+</span></span></span><span class=line><span class=cl>    <span class=n>Greet</span><span class=p>()</span> <span class=o>=</span> <span class=k>default</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>friend</span> <span class=n>Derived</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span></code></pre></td></tr></table></div></div><p>这种方法有两个需要注意的点:</p><ul><li>子类如果是个aggregate类, 将不能进行aggregate初始化, 因为aggregate初始化不能访问基类的private构造函数.
+对于上面的<code>Bob</code>, 应改成:</li></ul><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>struct</span> <span class=nc>Bob</span> <span class=o>:</span> <span class=n>Greet</span><span class=o>&lt;</span><span class=n>Bob</span><span class=o>&gt;</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>std</span><span class=o>::</span><span class=n>string_view</span> <span class=n>name</span><span class=p>()</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=s>&#34;Bob&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=c1>// Add a defaulted ctor, so Bob is not an aggregate.
+</span></span></span><span class=line><span class=cl>    <span class=c1>// Otherwise Bob{} initialization won&#39;t work if Greet has private ctor.
+</span></span></span><span class=line><span class=cl>    <span class=n>Bob</span><span class=p>()</span> <span class=o>=</span> <span class=k>default</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span></code></pre></td></tr></table></div></div><ul><li>如果这样的CRTP基类被继续继承为另一个CRTP基类, 那么最后的实际类仍无法实例化, 因为第二个CRTP基类并不是friend, 无法访问基类的private构建函数. 这个没有很好的解决办法. 也就是说, 这样的CRTP基类必须直接被实际类继承.</li></ul><h2 id=static_assert-is_base_of>static_assert is_base_of</h2><p>初学者很可能会想到, 我在CRTP基类模板里加个static_assert不就行了? 但是加在class scope里是不work的, 因为<code>Derived</code>类在作为模板参数时, 它的定义还未完成, 属于incomplete type. 因此, 没法在CRTP基类的class scope里写static_assert检查<code>Derived</code>是否继承了该类.</p><p>但是, 我们仍然可以在方法内, 或者构建函数内部检查:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span><span class=lnt>9
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>template</span><span class=o>&lt;</span><span class=k>typename</span> <span class=n>Derived</span><span class=o>&gt;</span>
+</span></span><span class=line><span class=cl><span class=k>struct</span> <span class=nc>Greet</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=nf>greet</span><span class=p>()</span> <span class=k>const</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>std</span><span class=o>::</span><span class=n>cout</span> <span class=o>&lt;&lt;</span> <span class=s>&#34;Hello, my name is &#34;</span> <span class=o>&lt;&lt;</span> <span class=k>static_cast</span><span class=o>&lt;</span><span class=k>const</span> <span class=n>Derived</span><span class=o>*&gt;</span><span class=p>(</span><span class=k>this</span><span class=p>)</span><span class=o>-&gt;</span><span class=n>name</span><span class=p>()</span> <span class=o>&lt;&lt;</span> <span class=sc>&#39;\n&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=n>Greet</span><span class=p>()</span> <span class=k>noexcept</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>static_assert</span><span class=p>(</span><span class=n>std</span><span class=o>::</span><span class=n>is_base_of_v</span><span class=o>&lt;</span><span class=n>Greet</span><span class=p>,</span> <span class=n>Derived</span><span class=o>&gt;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>};</span>
+</span></span></code></pre></td></tr></table></div></div><p>不过, 这个方法仍然有个缺陷, 那就是, 它没法防止如下的问题:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c++ data-lang=c++><span class=line><span class=cl><span class=k>struct</span> <span class=nc>Alice</span> <span class=o>:</span> <span class=n>Greet</span><span class=o>&lt;</span><span class=n>Alice</span><span class=o>&gt;</span> <span class=p>{</span><span class=cm>/* ... */</span><span class=p>};</span>
+</span></span><span class=line><span class=cl><span class=k>struct</span> <span class=nc>Bob</span> <span class=o>:</span> <span class=n>Greet</span><span class=o>&lt;</span><span class=n>Alice</span><span class=o>&gt;</span> <span class=p>{</span><span class=cm>/* ... */</span><span class=p>};</span>
+</span></span></code></pre></td></tr></table></div></div><p>第二行的模板参数写错了, 但是我们的static_assert并不会报错, 因为<code>Alice</code>确实是<code>Greet&lt;Alice></code>的子类!</p><hr><h1 id=未完待续>(未完待续)</h1></section><footer class=article-footer><section class=article-tags><a href=/tags/c++/>C++</a>
+<a href=/tags/template-metaprogramming/>Template Metaprogramming</a></section><section class=article-copyright><svg class="icon icon-tabler icon-tabler-copyright" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z"/><circle cx="12" cy="12" r="9"/><path d="M14.5 9a3.5 4 0 100 6"/></svg>
+<span>Licensed under CC BY-NC-SA 4.0</span></section></footer></article><aside class=related-content--wrapper><h2 class=section-title>Related content</h2><div class=related-content><div class="flex article-list--tile"><article><a href=/p/c-%E5%AE%9E%E7%8E%B0%E7%B3%BB%E5%88%97-iterator-adaptor/><div class=article-details><h2 class=article-title>C++实现系列: Iterator adaptor</h2></div></a></article><article><a href=/p/compile-time-loops-in-c/><div class=article-details><h2 class=article-title>Compile time loops in C++</h2></div></a></article><article><a href=/p/imperfect-forwarding/><div class=article-details><h2 class=article-title>(Im)perfect forwarding</h2></div></a></article></div></div></aside><div class=disqus-container></div><style>.disqus-container{background-color:var(--card-background);border-radius:var(--card-border-radius);box-shadow:var(--shadow-l1);padding:var(--card-padding)}</style><script>window.addEventListener("onColorSchemeChange",e=>{typeof DISQUS=="object"&&DISQUS.reset({reload:!0})})</script><footer class=site-footer><section class=copyright>&copy;
+2020 -
+2026 Kya's Blog</section><section class=powerby>Built with <a href=https://gohugo.io/ target=_blank rel=noopener>Hugo</a><br>Theme <b><a href=https://github.com/CaiJimmy/hugo-theme-stack target=_blank rel=noopener data-version=3.31.0>Stack</a></b> designed by <a href=https://jimmycai.com target=_blank rel=noopener>Jimmy</a></section></footer><div class=pswp tabindex=-1 role=dialog aria-hidden=true><div class=pswp__bg></div><div class=pswp__scroll-wrap><div class=pswp__container><div class=pswp__item></div><div class=pswp__item></div><div class=pswp__item></div></div><div class="pswp__ui pswp__ui--hidden"><div class=pswp__top-bar><div class=pswp__counter></div><button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+<button class="pswp__button pswp__button--share" title=Share></button>
+<button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+<button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button><div class=pswp__preloader><div class=pswp__preloader__icn><div class=pswp__preloader__cut><div class=pswp__preloader__donut></div></div></div></div></div><div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap"><div class=pswp__share-tooltip></div></div><button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+</button>
+<button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)"></button><div class=pswp__caption><div class=pswp__caption__center></div></div></div></div></div><script src=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js integrity="sha256-ePwmChbbvXbsO02lbM3HoHbSHTHFAeChekF1xKJdleo=" crossorigin=anonymous defer></script><script src=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js integrity="sha256-UKkzOn/w1mBxRmLLGrSeyB4e1xbrp4xylgAWb3M42pU=" crossorigin=anonymous defer></script><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.min.css crossorigin=anonymous><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.css crossorigin=anonymous></main></div><script src=https://cdn.jsdelivr.net/npm/node-vibrant@3.1.6/dist/vibrant.min.js integrity="sha256-awcR2jno4kI5X0zL8ex0vi2z+KMkF24hUW8WePSA9HM=" crossorigin=anonymous></script><script type=text/javascript src=/ts/main.1e9a3bafd846ced4c345d084b355fb8c7bae75701c338f8a1f8a82c780137826.js defer></script><script>(function(){const e=document.createElement("link");e.href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap",e.type="text/css",e.rel="stylesheet",document.head.appendChild(e)})()</script></body></html>
