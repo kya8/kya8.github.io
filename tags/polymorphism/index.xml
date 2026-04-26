@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Polymorphism on Kya's Blog</title><link>https://kya8.github.io/tags/polymorphism/</link><description>Recent content in Polymorphism on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Tue, 26 Dec 2023 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/polymorphism/index.xml" rel="self" type="application/rss+xml"/><item><title>Type erasure and polymorphic interface objects</title><link>https://kya8.github.io/p/type-erasure-and-polymorphic-interface-objects/</link><pubDate>Tue, 11 Jul 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/type-erasure-and-polymorphic-interface-objects/</guid><description>&lt;h1 id="runtime-polymorphism-in-c"&gt;Runtime polymorphism in C++
+&lt;/h1&gt;&lt;p&gt;The canonical way of doing runtime polymorphism in C++ has always been virtual functions and inheritance. Compared to alternative solutions found in other languages, such as:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Interface in Go&lt;/li&gt;
+&lt;li&gt;Trait object in Rust&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;, the virtual function plus inheritance approach is often considered inferior, for the following reasons:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Intrusive design&lt;/strong&gt;: All implementers of an interface must inherit from it.
+The implementation object also has to make room for the vtable!&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Mandates reference semantics&lt;/strong&gt;: You can only use the interface polymorphically through pointers or references.
+A factory function has to return &lt;code&gt;std::unique_ptr&amp;lt;InterfaceType&amp;gt;&lt;/code&gt;, which is messy. (To be fair, interface objects also require dynamic allocation internally)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Performance cost&lt;/strong&gt;: They are often found to be slower than alternatives.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h1 id="polymorphic-object"&gt;polymorphic object
+&lt;/h1&gt;&lt;p&gt;A polymorphic object type defines a set of methods. Such object can then store another object of abitary type, that implements the defined set of methods.&lt;/p&gt;
+&lt;p&gt;People have been writing such implementations for years, such as &lt;a class="link" href="https://github.com/facebook/folly/blob/main/folly/docs/Poly.md" target="_blank" rel="noopener"
+&gt;Poly&lt;/a&gt;, &lt;a class="link" href="https://github.com/ldionne/dyno" target="_blank" rel="noopener"
+&gt;dyno&lt;/a&gt;, &lt;a class="link" href="https://github.com/microsoft/proxy" target="_blank" rel="noopener"
+&gt;proxy&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id="benefits"&gt;benefits
+&lt;/h2&gt;&lt;ul&gt;
+&lt;li&gt;Allows value-semantics, and copying. Although polymorphic objects still require dynamic allocation in the general case, the user does not need to care about it. Copying is possible, by storing function pointers of copying operations. Virtual inheritance on the other hand, does not play nicely with copy constructors!&lt;/li&gt;
+&lt;li&gt;Allows Small buffer optimization. Since they&amp;rsquo;re custom objects, SBO is possible, compared to &lt;code&gt;std::unique_ptr&amp;lt;InterfaceType&amp;gt;&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;Allows duck typing. Although this isn&amp;rsquo;t always desired.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="type-erasure"&gt;Type erasure
+&lt;/h2&gt;&lt;p&gt;Actually, we already have a limited version of polymorphic object in C++: &lt;code&gt;std::function&lt;/code&gt;.
+It only knows about the &lt;code&gt;operator()&lt;/code&gt;, but the idea is similar: Use type-erasure.&lt;/p&gt;
+&lt;p&gt;For polymorphic objects, we need to keep the function pointers somewhere, but for potentially multiple member methods.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;To be continued&amp;hellip;&lt;/p&gt;
+&lt;/blockquote&gt;</description></item></channel></rss>

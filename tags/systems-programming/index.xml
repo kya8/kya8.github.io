@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Systems Programming on Kya's Blog</title><link>https://kya8.github.io/tags/systems-programming/</link><description>Recent content in Systems Programming on Kya's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Mon, 20 May 2024 00:00:00 +0000</lastBuildDate><atom:link href="https://kya8.github.io/tags/systems-programming/index.xml" rel="self" type="application/rss+xml"/><item><title>Portable Signal handling</title><link>https://kya8.github.io/p/portable-signal-handling/</link><pubDate>Mon, 20 May 2024 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/portable-signal-handling/</guid><description>&lt;h1 id="stdsignal-and-signal-handlers"&gt;&lt;code&gt;std::signal&lt;/code&gt; and signal handlers
+&lt;/h1&gt;&lt;p&gt;The standard function &lt;code&gt;std::signal&lt;/code&gt; enables registering &lt;em&gt;signal handlers&lt;/em&gt; that are invoked when a given signal is delivered, asynchronously.
+Since the handler can interrupt the execution of the program at potentially any point, actions allowed in the handler are quite limited.
+In particular, the handler is allowed to access a global (with static storage duration) variable that is &lt;code&gt;volatile std::sig_atomic_t&lt;/code&gt; or lock-free &lt;code&gt;std::atomic&amp;lt;...&amp;gt;&lt;/code&gt;.
+This lets us set a flag inside the handler, and correctly check the flag outside the handler.
+Additionally, a signal handler can re-call &lt;code&gt;std::signal&lt;/code&gt; for the same signal that is currently being handled.&lt;/p&gt;
+&lt;p&gt;The POSIX standard specifies additional library functions that are guaranteed to be async-signal-safe, that is, safe to call from signal handlers (See &lt;code&gt;man 7 signal-safety&lt;/code&gt;).
+However on POSIX systems, the &lt;code&gt;sigaction&lt;/code&gt; family of functions should be preferred.&lt;/p&gt;
+&lt;h1 id="portable-ways-to-catch-signals"&gt;Portable ways to catch signals
+&lt;/h1&gt;&lt;p&gt;Suppose we need to catch a signal and inform the program about it, so it can act accordingly. E.g., catching &lt;code&gt;SIGINT&lt;/code&gt; (&lt;code&gt;Ctrl-C&lt;/code&gt;) to perform graceful cleanup and shutdown.
+The canonical way of doing this is to have a dedicated thread that responds to a global flag, which shall be set by the signal handler.&lt;/p&gt;
+&lt;p&gt;Before C++20, there&amp;rsquo;s no platform-independent way, besides polling the flag repeatedly:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt; 1
+&lt;/span&gt;&lt;span class="lnt"&gt; 2
+&lt;/span&gt;&lt;span class="lnt"&gt; 3
+&lt;/span&gt;&lt;span class="lnt"&gt; 4
+&lt;/span&gt;&lt;span class="lnt"&gt; 5
+&lt;/span&gt;&lt;span class="lnt"&gt; 6
+&lt;/span&gt;&lt;span class="lnt"&gt; 7
+&lt;/span&gt;&lt;span class="lnt"&gt; 8
+&lt;/span&gt;&lt;span class="lnt"&gt; 9
+&lt;/span&gt;&lt;span class="lnt"&gt;10
+&lt;/span&gt;&lt;span class="lnt"&gt;11
+&lt;/span&gt;&lt;span class="lnt"&gt;12
+&lt;/span&gt;&lt;span class="lnt"&gt;13
+&lt;/span&gt;&lt;span class="lnt"&gt;14
+&lt;/span&gt;&lt;span class="lnt"&gt;15
+&lt;/span&gt;&lt;span class="lnt"&gt;16
+&lt;/span&gt;&lt;span class="lnt"&gt;17
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-c++" data-lang="c++"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;static&lt;/span&gt; &lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;atomic&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;bool&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="nb"&gt;false&lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt; &lt;span class="c1"&gt;// assuming it&amp;#39;s lock-free
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;extern&lt;/span&gt; &lt;span class="s"&gt;&amp;#34;C&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;void&lt;/span&gt; &lt;span class="n"&gt;signal_handler&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="n"&gt;sig&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sig&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="n"&gt;SIGINT&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;store&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;true&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;void&lt;/span&gt; &lt;span class="nf"&gt;sigint_thread_fn&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="cm"&gt;/*...*/&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="c1"&gt;// demonstration only
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;while&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;load&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;this_thread&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;sleep_for&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;chrono&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;milliseconds&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;100&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// precede to perform shutdown actions ...
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// e.g., signaling the main thread to stop.
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;p&gt;&amp;hellip;Because we don&amp;rsquo;t have a signal-safe function to wait on the atomic flag.&lt;/p&gt;
+&lt;h2 id="stdatomictwait"&gt;&lt;code&gt;std::atomic&amp;lt;T&amp;gt;::wait()&lt;/code&gt;
+&lt;/h2&gt;&lt;p&gt;C++20 introduces &lt;code&gt;wait()&lt;/code&gt; and &lt;code&gt;notify()&lt;/code&gt; methods on &lt;code&gt;std::atomic&amp;lt;T&amp;gt;&lt;/code&gt; and &lt;code&gt;std::atomic_flag&lt;/code&gt;.
+If the atomic type is lock-free (which is always the case for &lt;code&gt;std::atomic_flag&lt;/code&gt;),
+we can safely use &lt;code&gt;wait()&lt;/code&gt; and &lt;code&gt;notify()&lt;/code&gt; in the waiting thread and the signal handler, to avoid the sleep-and-poll loop above.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;div class="chroma"&gt;
+&lt;table class="lntable"&gt;&lt;tr&gt;&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code&gt;&lt;span class="lnt"&gt; 1
+&lt;/span&gt;&lt;span class="lnt"&gt; 2
+&lt;/span&gt;&lt;span class="lnt"&gt; 3
+&lt;/span&gt;&lt;span class="lnt"&gt; 4
+&lt;/span&gt;&lt;span class="lnt"&gt; 5
+&lt;/span&gt;&lt;span class="lnt"&gt; 6
+&lt;/span&gt;&lt;span class="lnt"&gt; 7
+&lt;/span&gt;&lt;span class="lnt"&gt; 8
+&lt;/span&gt;&lt;span class="lnt"&gt; 9
+&lt;/span&gt;&lt;span class="lnt"&gt;10
+&lt;/span&gt;&lt;span class="lnt"&gt;11
+&lt;/span&gt;&lt;span class="lnt"&gt;12
+&lt;/span&gt;&lt;span class="lnt"&gt;13
+&lt;/span&gt;&lt;span class="lnt"&gt;14
+&lt;/span&gt;&lt;span class="lnt"&gt;15
+&lt;/span&gt;&lt;span class="lnt"&gt;16
+&lt;/span&gt;&lt;span class="lnt"&gt;17
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;
+&lt;td class="lntd"&gt;
+&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-c++" data-lang="c++"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;static&lt;/span&gt; &lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;atomic_flag&lt;/span&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;{};&lt;/span&gt; &lt;span class="c1"&gt;// Always lock-free
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// C++20 guarantees it&amp;#39;s initialized to false
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;extern&lt;/span&gt; &lt;span class="s"&gt;&amp;#34;C&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;void&lt;/span&gt; &lt;span class="n"&gt;signal_handler&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="n"&gt;sig&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sig&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="n"&gt;SIGINT&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;test_and_set&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;notify_all&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;void&lt;/span&gt; &lt;span class="nf"&gt;sigint_thread_fn&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="cm"&gt;/*...*/&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;flag&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;wait&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;false&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt; &lt;span class="c1"&gt;// will block until flag has been changed.
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="c1"&gt;// ...
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;&lt;h1 id="platform-dependent-ways"&gt;Platform-dependent ways
+&lt;/h1&gt;&lt;h2 id="posix"&gt;POSIX
+&lt;/h2&gt;&lt;p&gt;Incrementing a POSIX semaphore (&lt;code&gt;sem_post&lt;/code&gt;) is signal-safe according to the POSIX specification.
+This can be used for notification in signal handlers. The waiting thread would wait via &lt;code&gt;sem_wait&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Alternatively there is &lt;code&gt;sigwaitinfo&lt;/code&gt; and &lt;code&gt;sigwait&lt;/code&gt;, which explicitly wait for pending signals.&lt;/p&gt;
+&lt;p&gt;If you&amp;rsquo;re on Linux, another alternative would be using &lt;code&gt;signalfd&lt;/code&gt; and waiting on the file descriptor (e.g. via &lt;code&gt;epoll&lt;/code&gt;).&lt;/p&gt;
+&lt;h2 id="windows"&gt;Windows
+&lt;/h2&gt;</description></item><item><title>Fork(2) and the OOM killer</title><link>https://kya8.github.io/p/fork2-and-the-oom-killer/</link><pubDate>Thu, 16 Feb 2023 00:00:00 +0000</pubDate><guid>https://kya8.github.io/p/fork2-and-the-oom-killer/</guid><description>&lt;h1 id="the-fork2-syscall"&gt;The &lt;code&gt;fork(2)&lt;/code&gt; syscall
+&lt;/h1&gt;&lt;p&gt;This is one of the identifying features of a Unix-like operating system. &lt;code&gt;fork(2)&lt;/code&gt; has existed since the first version of Unix back in the days of PDP-11.
+It creates a new process by simply duplicates the entire address space of the calling process, after which point they run indenpendently.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;fork&lt;/code&gt;+&lt;code&gt;exec&lt;/code&gt; is the standard way to create a child process in Unix, although it has an obvious problem: The parent process will have its entire process space copied,
+only to spawn a new process that has little regard for any of it. In fact, this is what the First Edition Unix did.&lt;/p&gt;
+&lt;h2 id="the-virtual-memory-story"&gt;The virtual memory story
+&lt;/h2&gt;&lt;p&gt;Overtime, people got smart and started implementing Copy-On-Write for &lt;code&gt;fork&lt;/code&gt;, so it din&amp;rsquo;t need to actually copy that much pages. In the case of &lt;code&gt;fork&lt;/code&gt;+&lt;code&gt;exec&lt;/code&gt;, no extra
+segments will be copied. This is the most prominent reason for defending &lt;code&gt;fork&lt;/code&gt;: The OS only copies when needed! Nothing is wasted.&lt;/p&gt;
+&lt;p&gt;Indeed, the CoW approach did solve some of &lt;code&gt;fork&lt;/code&gt;&amp;rsquo;s problems, but not all. In particular, The file descriptor inhertance from &lt;code&gt;fork&lt;/code&gt; isn&amp;rsquo;t nice to play with, and has lead to many hacks (such as &lt;code&gt;CLOEXEC&lt;/code&gt;).
+Not only that, this model has implicitly lead to memory overcommittment and the OOM killer on Linux, which IMO is one of the most glaring design failures on Linux.&lt;/p&gt;
+&lt;h1 id="the-oom-killer"&gt;The OOM killer
+&lt;/h1&gt;&lt;p&gt;Support we have 8G of memory in total, and some process has taken-up 6G of it (e.g., by &lt;code&gt;malloc&lt;/code&gt; and &lt;code&gt;memset&lt;/code&gt;). Now this process calls &lt;code&gt;fork&lt;/code&gt; to create a new child process.
+We all know that will not fail on Linux. What if the calling process merely wants to &lt;code&gt;fork&lt;/code&gt; and &lt;code&gt;exec&lt;/code&gt; a new process? The 2G remaining memory is more than enough for it.
+After all, it is the obvious point for CoW implementations of &lt;code&gt;fork&lt;/code&gt; which we all agree upon.&lt;/p&gt;
+&lt;p&gt;There&amp;rsquo;s no way for the OS to know how the child process will be used after &lt;code&gt;fork&lt;/code&gt;. It may exec a tiny program and exit immediately, or it might &lt;strong&gt;actually&lt;/strong&gt; fiddle with all the &amp;ldquo;copied&amp;rdquo; data.
+The CoW implementation is reponsible for keeping this transparent, so everyone is happy. That is, until the child process starts modifying more than 2G of memory and get killed by OOM!&lt;/p&gt;
+&lt;p&gt;By CoW &lt;code&gt;fork&lt;/code&gt; and overcommittment, the Linux kernel essentially lies to the child process that it has allocated 6G of memory, while effectively it can write to only 2G of it (given the parent process does not release its memory).
+The child is free to use that 6G of memory however it wants, but there&amp;rsquo;s no guarantee it won&amp;rsquo;t exhaust all available memory and get killed. Maybe the parent process will release its hold of memory at some point,
+so the lie is covered up. Who knows! Most user-land processes, might get killed by OOM, essentially at any point, because the kernel lies to user-land processes about memory reservations.&lt;/p&gt;
+&lt;p&gt;There are some other examples of memory overcommittment, e.g. &lt;code&gt;malloc&lt;/code&gt;, but that is a different story.&lt;/p&gt;
+&lt;h1 id="alternatives"&gt;Alternatives
+&lt;/h1&gt;&lt;h2 id="vfork-and-clone"&gt;vfork and clone
+&lt;/h2&gt;&lt;p&gt;The &lt;code&gt;vfork&lt;/code&gt; syscall was an early alternative to &lt;code&gt;fork&lt;/code&gt;, first appearing on BSD. It&amp;rsquo;s essentially a restricted version of &lt;code&gt;fork&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;A more functional alternative would be &lt;code&gt;clone&lt;/code&gt; on Linux. From &lt;code&gt;man 2 clone&lt;/code&gt;:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;By contrast with fork(2), these system calls provide more precise control over what pieces of execution context are shared between the calling process and the child process&amp;hellip;&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2 id="spawn"&gt;spawn
+&lt;/h2&gt;&lt;p&gt;The obvious solution is the &lt;em&gt;spawn&lt;/em&gt; model, where a new process is constructed from a clean state. The user only opts in for some inheritance or shared state, so it has none of the flaws of fork.&lt;/p&gt;
+&lt;p&gt;A somewhat failed attemp is &lt;code&gt;posix_spawn&lt;/code&gt; defined by POSIX standard. Essentially no one uses it since it&amp;rsquo;s far too cumbersome.&lt;/p&gt;
+&lt;p&gt;If implemented correctly, spawn should be preferable to &lt;code&gt;fork&lt;/code&gt; in most cases.
+The &lt;code&gt;fork&lt;/code&gt; model &lt;em&gt;&lt;strong&gt;can&lt;/strong&gt;&lt;/em&gt; be genuinely useful in some contexts, however most of time people just &lt;code&gt;fork&lt;/code&gt; and &lt;code&gt;exec&lt;/code&gt; to create child processes, which gave birth to its shortcomings.&lt;/p&gt;</description></item></channel></rss>
